@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+backend/build/
+frontend/build/
+frontend/dist/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Misc
+.DS_Store
+.idea/
+tmp/
+temp/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/

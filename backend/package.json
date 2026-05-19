@@ -1,0 +1,50 @@
+{
+   "name": "backend",
+   "version": "1.0.0",
+   "main": "src/index.ts",
+   "license": "MIT",
+   "dependencies": {
+      "bcrypt": "^4.0.1",
+      "body-parser": "^1.19.0",
+      "cors": "^2.8.5",
+      "dotenv": "^17.2.3",
+      "express": "^4.17.1",
+      "express-fileupload": "^1.2.1",
+      "http-status-codes": "^1.4.0",
+      "jsonwebtoken": "^8.5.1",
+      "lodash": "^4.17.21",
+      "moment": "^2.29.1",
+      "pg": "^8.11.0",
+      "reflect-metadata": "^0.1.10",
+      "typeorm": "^0.3.26",
+      "validator": "^13.0.0",
+      "winston": "^3.2.1"
+   },
+   "scripts": {
+      "start": "ts-node src/index.ts",
+      "compile": "tsc",
+      "lint": "eslint src/**/*.ts",
+      "typeorm": "typeorm-ts-node-commonjs",
+      "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
+      "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
+      "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
+      "seed:run": "ts-node src/database/seed.ts"
+   },
+   "devDependencies": {
+      "@types/bcrypt": "^3.0.0",
+      "@types/cors": "^2.8.17",
+      "@types/express": "^4.17.23",
+      "@types/express-fileupload": "^1.1.6",
+      "@types/jsonwebtoken": "^8.5.0",
+      "@types/lodash": "^4.14.155",
+      "@types/pg": "^8.11.0",
+      "@types/node": "^18.19.125",
+      "@types/validator": "^13.0.0",
+      "ts-node": "^10.9.2",
+      "typeorm-extension": "^3.7.1",
+      "typescript": "^4.9.5"
+   },
+   "engines": {
+      "node": "22.13.1"
+   }
+}

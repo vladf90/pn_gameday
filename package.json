@@ -1,0 +1,32 @@
+{
+  "name": "pn_gameday",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:frontend\"",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "pnpm --filter backend start",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend compile",
+    "lint": "pnpm lint:frontend && pnpm lint:backend",
+    "lint:frontend": "pnpm --filter frontend lint",
+    "lint:backend": "pnpm --filter backend lint",
+    "migration:run": "pnpm --filter backend migration:run",
+    "migration:revert": "pnpm --filter backend migration:revert",
+    "migration:generate": "pnpm --filter backend migration:generate",
+    "seed:run": "pnpm --filter backend seed:run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
+    "globals": "^15.0.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": "22.13.1"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
