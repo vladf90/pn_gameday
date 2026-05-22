@@ -8,7 +8,18 @@ import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
 import {Context, ContextFactory} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
+import {
+    AttachFixtureValidator,
+    CreateSessionValidator,
+    DeleteSessionValidator,
+    DetachFixtureValidator,
+    GetSessionValidator,
+    SessionController,
+    UpdateSessionValidator,
+} from "./controller/SessionController";
 import {UserRepository} from "./database/repositories/UserRepository";
+import {SessionRepository} from "./database/repositories/SessionRepository";
+import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
 import {AppDataSource} from "./database/data-source";
 import {RateLimitTracker, SportmonksClient} from "./sportmonks";
 
@@ -56,9 +67,28 @@ export class Bootstrap {
         const router = new NoAuthRouter(this.app);
         router.post("/auth/login", userController.login, new LoginValidator());
 
+        const sessionRepository = new SessionRepository();
+        const sessionFixtureRepository = new SessionFixtureRepository();
+        const sessionController = new SessionController(sessionRepository, sessionFixtureRepository);
+
         // Authenticated routes
         const authRouter = new UserAuthRouter(this.app, publicKey);
         authRouter.get("/users/info", userController.get);
+
+        authRouter.get("/sessions", sessionController.getAll, undefined,
+            { resource: 'session', action: 'read' });
+        authRouter.get("/sessions/:id", sessionController.get, new GetSessionValidator(),
+            { resource: 'session', action: 'read' });
+        authRouter.post("/sessions", sessionController.create, new CreateSessionValidator(),
+            { resource: 'session', action: 'create' });
+        authRouter.patch("/sessions/:id", sessionController.update, new UpdateSessionValidator(),
+            { resource: 'session', action: 'update' });
+        authRouter.delete("/sessions/:id", sessionController.delete, new DeleteSessionValidator(),
+            { resource: 'session', action: 'delete' });
+        authRouter.post("/sessions/:id/fixtures", sessionController.attachFixture, new AttachFixtureValidator(),
+            { resource: 'session', action: 'update' });
+        authRouter.delete("/sessions/:id/fixtures/:fixtureId", sessionController.detachFixture, new DetachFixtureValidator(),
+            { resource: 'session', action: 'update' });
     }
 
     private configureSportmonks() {
