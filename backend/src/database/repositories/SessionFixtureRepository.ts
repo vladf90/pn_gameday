@@ -44,4 +44,21 @@ export class SessionFixtureRepository {
             .getRawMany<{ sportmonks_fixture_id: string | number }>();
         return rows.map(row => Number(row.sportmonks_fixture_id));
     }
+
+    /**
+     * Returns the deduped, ascending list of `sportmonks_fixture_id` values
+     * attached to a single session. Used by `GET /sessions/:id/live` to look
+     * up entries in the in-memory snapshot store without issuing a SportMonks
+     * call. The composite PK on `(session_id, sportmonks_fixture_id)` already
+     * guarantees uniqueness per-session, so the DISTINCT is defensive.
+     */
+    async findSportmonksFixtureIdsBySessionId(sessionId: number): Promise<number[]> {
+        const rows = await this.repository
+            .createQueryBuilder("sf")
+            .select("DISTINCT sf.sportmonks_fixture_id", "sportmonks_fixture_id")
+            .where("sf.session_id = :sessionId", { sessionId })
+            .orderBy("sportmonks_fixture_id", "ASC")
+            .getRawMany<{ sportmonks_fixture_id: string | number }>();
+        return rows.map(row => Number(row.sportmonks_fixture_id));
+    }
 }
