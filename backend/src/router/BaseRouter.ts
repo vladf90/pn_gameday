@@ -8,6 +8,15 @@ import * as cors from "cors";
 import { hasPermission } from "../config/permissions";
 import * as HttpStatus from 'http-status-codes';
 
+type HttpMethod = 'get' | 'post' | 'patch' | 'delete';
+
+type Permission = { resource: string; action: string };
+
+type RequestHandler<AuthType, RequestType, ResponseType> =
+    (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>;
+
+type RequestParser = (req: Request) => Record<string, unknown>;
+
 export abstract class BaseRouter<AuthType extends IPermission | void> implements IRouter<AuthType> {
     private logger = new Logger("Router");
 
@@ -15,6 +24,83 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
     }
 
     abstract authenticate(request: Request): Promise<AuthType>;
+
+    public get<RequestType, ResponseType>(path: string, requestHandler: RequestHandler<AuthType, RequestType, ResponseType>, validator?: Validator<RequestType>, permission?: Permission): void {
+        this.register('get', path, requestHandler, BaseRouter.parseQuery, validator, permission);
+    }
+
+    public post<RequestType, ResponseType>(path: string, requestHandler: RequestHandler<AuthType, RequestType, ResponseType>, validator?: Validator<RequestType>, permission?: Permission): void {
+        this.register('post', path, requestHandler, BaseRouter.parseBody, validator, permission);
+    }
+
+    public patch<RequestType, ResponseType>(path: string, requestHandler: RequestHandler<AuthType, RequestType, ResponseType>, validator?: Validator<RequestType>, permission?: Permission): void {
+        this.register('patch', path, requestHandler, BaseRouter.parseBody, validator, permission);
+    }
+
+    public delete<RequestType, ResponseType>(path: string, requestHandler: RequestHandler<AuthType, RequestType, ResponseType>, validator?: Validator<RequestType>, permission?: Permission): void {
+        this.register('delete', path, requestHandler, BaseRouter.parseBody, validator, permission);
+    }
+
+    private register<RequestType, ResponseType>(
+        method: HttpMethod,
+        path: string,
+        requestHandler: RequestHandler<AuthType, RequestType, ResponseType>,
+        parseRequest: RequestParser,
+        validator?: Validator<RequestType>,
+        permission?: Permission,
+    ): void {
+        this.app[method](path, cors(), async (req: Request, res: Response) => {
+            const ctx = ContextFactory.createRequestContext(path, "dummy", method.toUpperCase());
+            try {
+                const auth = await this.authenticate(req);
+
+                if (permission) {
+                    this.checkPermission(auth, permission.resource, permission.action);
+                }
+
+                const request = parseRequest(req) as RequestType;
+
+                if (validator != null) {
+                    const errors = validator.validate(request);
+                    if (errors != null) {
+                        throw ServiceError.build("Validation Error", 400, {errors: errors});
+                    }
+                }
+
+                const response = await requestHandler(ctx, auth, request);
+                this.logger.info(ctx, "", {statusCode: 200});
+                this.sendResponse(res, response);
+            } catch (e) {
+                this.handleError(ctx, res, e);
+            }
+        });
+    }
+
+    private static parseQuery: RequestParser = (req) => {
+        const request: Record<string, unknown> = {};
+        for (const key in req.query) {
+            request[key] = req.query[key];
+        }
+        for (const key in req.params) {
+            request[key] = req.params[key];
+        }
+        return request;
+    };
+
+    private static parseBody: RequestParser = (req) => {
+        const request: Record<string, unknown> = {};
+        for (const key in req.body) {
+            request[key] = req.body[key];
+        }
+        for (const key in req.files) {
+            request[key] = req.files[key];
+        }
+        for (const key in req.params) {
+            const value = req.params[key];
+            request[key] = !isNaN(Number(value)) ? parseInt(value) : value;
+        }
+        return request;
+    };
 
     private checkPermission(auth: AuthType, resource: string, action: string): void {
         if (!auth || !auth.permissions) {
@@ -29,224 +115,29 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         }
     }
 
-    public get<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
-        this.app.get(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "GET")
-            try {
-                const request = {};
-                const auth = await this.authenticate(req);
-
-                if (permission) {
-                    this.checkPermission(auth, permission.resource, permission.action);
-                }
-
-                if (req.query) {
-                    for (const key in req.query) {
-                        request[key] = req.query[key];
-                    }
-                }
-
-                if (req.params) {
-                    for (const key in req.params) {
-                        request[key] = req.params[key];
-                    }
-                }
-
-                if (validator != null) {
-                    const errors = validator.validate(request);
-                    if (errors != null) {
-                        throw ServiceError.build("Validation Error", 400, {errors: errors});
-                    }
-                }
-                const response = await requestHandler(ctx, auth, request as RequestType);
-                this.logger.info(ctx, "", {statusCode: 200});
-
-                if (this.isRawResponse(response)) {
-                    this.handleRawResponse(res, response);
-                } else if (this.isFileResponse(response)) {
-                    this.handleFileResponse(res, response);
-                } else if (this.isBufferResponse(response)) {
-                    this.handleBufferResponse(res, response);
-                } else {
-                    res.send(this.encapsulateResponse(response, 200));
-                }
-            } catch (e) {
-                if (e instanceof ServiceError) {
-                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
-                    res.status(e.getStatusCode()).send({
-                        message: e.message,
-                        code: e.getStatusCode()
-                    });
-                    return;
-                }
-                throw e;
-            }
-        });
+    private sendResponse<ResponseType>(res: Response, response: ResponseType): void {
+        if (this.isRawResponse(response)) {
+            this.handleRawResponse(res, response);
+        } else if (this.isFileResponse(response)) {
+            this.handleFileResponse(res, response);
+        } else if (this.isBufferResponse(response)) {
+            this.handleBufferResponse(res, response);
+        } else {
+            res.send(this.encapsulateResponse(response, 200));
+        }
     }
 
-    public post<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
-        this.app.post(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "POST")
-            try {
-                const auth = await this.authenticate(req);
-
-                if (permission) {
-                    this.checkPermission(auth, permission.resource, permission.action);
-                }
-
-                const request = {};
-
-                for (const key in req.body) {
-                    request[key] = req.body[key];
-                }
-
-                for (const key in req.files) {
-                    request[key] = req.files[key];
-                }
-
-                for (const key in req.params) {
-                    request[key] = !isNaN(Number(req.params[key])) ? parseInt(req.params[key]) : req.params[key];
-                }
-
-                if (validator != null) {
-                    const errors = validator.validate(request);
-                    if (errors != null) {
-                        throw ServiceError.build("Validation Error", 400, {errors: errors});
-                    }
-                }
-
-                const response = await requestHandler(ctx, auth, request as RequestType);
-                this.logger.info(ctx, "", {statusCode: 200});
-
-                if (this.isFileResponse(response)) {
-                    this.handleFileResponse(res, response);
-                } else if (this.isBufferResponse(response)) {
-                    this.handleBufferResponse(res, response);
-                } else {
-                    res.send(this.encapsulateResponse(response, 200));
-                }
-            } catch (e) {
-                if (e instanceof ServiceError) {
-                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
-                    res.status(e.getStatusCode()).send({
-                        message: e.message,
-                        code: e.getStatusCode(),
-                        data: e.getInfo()
-                    });
-                    return;
-                }
-                throw e;
-            }
-        });
-    }
-
-    public patch<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
-        this.app.patch(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "PATCH")
-            try {
-                const auth = await this.authenticate(req);
-
-                if (permission) {
-                    this.checkPermission(auth, permission.resource, permission.action);
-                }
-
-                const request = {};
-
-                for (const key in req.body) {
-                    request[key] = req.body[key];
-                }
-
-                for (const key in req.files) {
-                    request[key] = req.files[key];
-                }
-
-                for (const key in req.params) {
-                    request[key] = !isNaN(Number(req.params[key])) ? parseInt(req.params[key]) : req.params[key];
-                }
-
-                if (validator != null) {
-                    const errors = validator.validate(request);
-                    if (errors != null) {
-                        throw ServiceError.build("Validation Error", 400, {errors: errors});
-                    }
-                }
-
-                const response = await requestHandler(ctx, auth, request as RequestType);
-                this.logger.info(ctx, "", {statusCode: 200});
-
-                if (this.isFileResponse(response)) {
-                    this.handleFileResponse(res, response);
-                } else if (this.isBufferResponse(response)) {
-                    this.handleBufferResponse(res, response);
-                } else {
-                    res.send(this.encapsulateResponse(response, 200));
-                }
-            } catch (e) {
-                if (e instanceof ServiceError) {
-                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
-                    res.status(e.getStatusCode()).send({
-                        message: e.message,
-                        code: e.getStatusCode(),
-                        data: e.getInfo()
-                    });
-                    return;
-                }
-                throw e;
-            }
-        });
-    }
-
-    public delete<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
-        this.app.delete(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "DELETE")
-            try {
-                const auth = await this.authenticate(req);
-
-                if (permission) {
-                    this.checkPermission(auth, permission.resource, permission.action);
-                }
-
-                const request = {};
-
-                // DELETE requests may carry a body (e.g. soft-delete payloads); parse it if present.
-                for (const key in req.body) {
-                    request[key] = req.body[key];
-                }
-
-                for (const key in req.params) {
-                    request[key] = !isNaN(Number(req.params[key])) ? parseInt(req.params[key]) : req.params[key];
-                }
-
-                if (validator != null) {
-                    const errors = validator.validate(request);
-                    if (errors != null) {
-                        throw ServiceError.build("Validation Error", 400, {errors: errors});
-                    }
-                }
-
-                const response = await requestHandler(ctx, auth, request as RequestType);
-                this.logger.info(ctx, "", {statusCode: 200});
-
-                if (this.isFileResponse(response)) {
-                    this.handleFileResponse(res, response);
-                } else if (this.isBufferResponse(response)) {
-                    this.handleBufferResponse(res, response);
-                } else {
-                    res.send(this.encapsulateResponse(response, 200));
-                }
-            } catch (e) {
-                if (e instanceof ServiceError) {
-                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
-                    res.status(e.getStatusCode()).send({
-                        message: e.message,
-                        code: e.getStatusCode(),
-                        data: e.getInfo()
-                    });
-                    return;
-                }
-                throw e;
-            }
-        });
+    private handleError(ctx: Context, res: Response, e: unknown): void {
+        if (e instanceof ServiceError) {
+            this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
+            res.status(e.getStatusCode()).send({
+                message: e.message,
+                code: e.getStatusCode(),
+                data: e.getInfo()
+            });
+            return;
+        }
+        throw e;
     }
 
     private encapsulateResponse<ResponseType>(response: ResponseType, code: number, message?: string): ResponseObject<ResponseType> {
