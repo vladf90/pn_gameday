@@ -8,6 +8,7 @@ import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
 import {Context, ContextFactory} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
+import {MetricsController} from "./controller/MetricsController";
 import {UserRepository} from "./database/repositories/UserRepository";
 import {AppDataSource} from "./database/data-source";
 import {RateLimitTracker, SportmonksClient} from "./sportmonks";
@@ -29,9 +30,18 @@ export class Bootstrap {
 
         // SportMonks integration (ADR 0001). Read config + fail fast when enabled but
         // misconfigured, before touching the database — this is a pure env-var check.
-        // The client is held on the instance for use by issues #5/#6; no routes are
-        // registered yet.
+        // The client is held on the instance for use by the fixture poller (#6).
         this.configureSportmonks();
+
+        // Prometheus scrape endpoint. Registered unconditionally — Node runtime
+        // metrics flow regardless of SportMonks status, and scrapers shouldn't
+        // start failing just because the integration was disabled. Mounted
+        // directly on `app` (not via `NoAuthRouter`) because the Prometheus
+        // exposition format needs a plain-text body with its own content-type,
+        // which the `BaseRouter` JSON envelope would clobber. Auth is
+        // intentionally absent — see backend/CLAUDE.md "Observability".
+        const metricsController = new MetricsController();
+        this.app.get("/metrics", metricsController.handle);
 
         // Initialize TypeORM connection
         await AppDataSource.initialize();

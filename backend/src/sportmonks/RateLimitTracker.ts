@@ -1,3 +1,5 @@
+import {sportmonksRateLimitRemaining, sportmonksRateLimitResetSeconds} from "./metrics";
+
 /**
  * In-memory tracker for SportMonks' per-entity hourly rate-limit buckets.
  *
@@ -5,8 +7,10 @@
  * that was queried (e.g. `fixtures`, `teams`). The client feeds each response
  * into `record()`; readers can pull the latest state via `get()` or `getAll()`.
  *
- * Metrics wiring (Prometheus gauges) lands in issue #5 and will subscribe via
- * `getAll()` at scrape time, so this class deliberately stays metrics-agnostic.
+ * Every call to `record()` also updates the corresponding Prometheus gauges
+ * (`sportmonks_rate_limit_remaining` and `sportmonks_rate_limit_reset_seconds`)
+ * so the metrics surface always matches the in-memory state — there is no
+ * separate sync path to drift out of step.
  */
 export interface RateLimitState {
     remaining: number;
@@ -24,6 +28,8 @@ export class RateLimitTracker {
             resetsInSeconds,
             lastUpdatedAt: new Date(),
         });
+        sportmonksRateLimitRemaining.labels(entity).set(remaining);
+        sportmonksRateLimitResetSeconds.labels(entity).set(resetsInSeconds);
     }
 
     get(entity: string): RateLimitState | undefined {

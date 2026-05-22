@@ -1,6 +1,13 @@
 import {Logger} from "../Logger";
 import {Context, ContextFactory} from "../Logger/Context";
 import {RateLimitTracker} from "./RateLimitTracker";
+import {
+    endpointLabel,
+    entityLabelFromPath,
+    sportmonksApiCallDurationSeconds,
+    sportmonksApiCallsTotal,
+    sportmonksRateLimitThrottledTotal,
+} from "./metrics";
 import {RateLimit, SportmonksResponseEnvelope} from "./types";
 
 /**
@@ -89,6 +96,12 @@ export class SportmonksClient {
         // Logged endpoint is the path only — query may contain selection
         // criteria we want, but never the token (which is header-only anyway).
         const loggedEndpoint = this.stripQuery(path);
+        // Metric labels: keep cardinality bounded. `endpointLabel` strips
+        // numeric ID segments so `/fixtures/multi/1,2,3` collapses to
+        // `/fixtures/multi`. Entity falls back to a path-based heuristic until
+        // we observe `requested_entity` in the response (see below).
+        const endpointMetricLabel = endpointLabel(loggedEndpoint);
+        const fallbackEntityLabel = options.entity ?? entityLabelFromPath(loggedEndpoint);
 
         let throttled = false;
 
@@ -102,10 +115,17 @@ export class SportmonksClient {
                 },
             });
             const durationMs = Date.now() - startedAt;
+            const durationSeconds = durationMs / 1000;
 
             if (response.status === 429) {
                 throttled = true;
-                // NOTE (#5): bump `sportmonks_api_calls_total{status="throttled"}` here.
+                sportmonksApiCallsTotal
+                    .labels(fallbackEntityLabel, endpointMetricLabel, "throttled")
+                    .inc();
+                sportmonksRateLimitThrottledTotal.labels(fallbackEntityLabel).inc();
+                sportmonksApiCallDurationSeconds
+                    .labels(fallbackEntityLabel, endpointMetricLabel)
+                    .observe(durationSeconds);
                 const waitSeconds = this.parseRetryAfterSeconds(response);
                 this.logger.warning(ctx, "SportMonks throttled", {
                     entity,
@@ -144,9 +164,18 @@ export class SportmonksClient {
                 );
             }
 
-            // NOTE (#5): bump `sportmonks_api_calls_total{status=<...>}` and observe
-            // `sportmonks_api_call_duration_seconds` here.
+            // Prefer the SportMonks-reported entity label so metrics group by
+            // the canonical name (e.g. "Fixture") rather than our heuristic.
+            const resolvedEntityLabel = rateLimit?.requestedEntity ?? fallbackEntityLabel;
+
+            sportmonksApiCallDurationSeconds
+                .labels(resolvedEntityLabel, endpointMetricLabel)
+                .observe(durationSeconds);
+
             if (!response.ok) {
+                sportmonksApiCallsTotal
+                    .labels(resolvedEntityLabel, endpointMetricLabel, "error")
+                    .inc();
                 this.logger.error(ctx, "SportMonks call failed", {
                     entity,
                     endpoint: loggedEndpoint,
@@ -163,6 +192,9 @@ export class SportmonksClient {
             }
 
             if (parseError || !envelope) {
+                sportmonksApiCallsTotal
+                    .labels(resolvedEntityLabel, endpointMetricLabel, "error")
+                    .inc();
                 this.logger.error(ctx, "SportMonks response was not valid JSON", {
                     entity,
                     endpoint: loggedEndpoint,
@@ -177,6 +209,9 @@ export class SportmonksClient {
                 );
             }
 
+            sportmonksApiCallsTotal
+                .labels(resolvedEntityLabel, endpointMetricLabel, "success")
+                .inc();
             this.logger.info(ctx, "SportMonks call ok", {
                 entity,
                 endpoint: loggedEndpoint,

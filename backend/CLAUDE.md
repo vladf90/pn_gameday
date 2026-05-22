@@ -99,3 +99,8 @@ Add the new resource to the relevant role definitions.
 
 Roles defined in `config/permissions.ts`. Permission format: `resource:action` (e.g., `user:create`).
 Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
+
+## Observability
+
+- `GET /metrics` exposes Prometheus metrics (Node runtime + SportMonks integration). The endpoint is **unauthenticated by design** so scrapers don't need credentials — protect it via reverse proxy / firewall / private subnet in production.
+- Metrics are defined in `src/sportmonks/metrics.ts` on a dedicated `Registry` instance (no global default).
