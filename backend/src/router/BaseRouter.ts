@@ -138,6 +138,115 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         });
     }
 
+    public patch<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
+        this.app.patch(path, cors(), async (req: Request, res: Response) => {
+            const ctx = ContextFactory.createRequestContext(path, "dummy", "PATCH")
+            try {
+                const auth = await this.authenticate(req);
+
+                if (permission) {
+                    this.checkPermission(auth, permission.resource, permission.action);
+                }
+
+                const request = {};
+
+                for (const key in req.body) {
+                    request[key] = req.body[key];
+                }
+
+                for (const key in req.files) {
+                    request[key] = req.files[key];
+                }
+
+                for (const key in req.params) {
+                    request[key] = !isNaN(Number(req.params[key])) ? parseInt(req.params[key]) : req.params[key];
+                }
+
+                if (validator != null) {
+                    const errors = validator.validate(request);
+                    if (errors != null) {
+                        throw ServiceError.build("Validation Error", 400, {errors: errors});
+                    }
+                }
+
+                const response = await requestHandler(ctx, auth, request as RequestType);
+                this.logger.info(ctx, "", {statusCode: 200});
+
+                if (this.isFileResponse(response)) {
+                    this.handleFileResponse(res, response);
+                } else if (this.isBufferResponse(response)) {
+                    this.handleBufferResponse(res, response);
+                } else {
+                    res.send(this.encapsulateResponse(response, 200));
+                }
+            } catch (e) {
+                if (e instanceof ServiceError) {
+                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
+                    res.status(e.getStatusCode()).send({
+                        message: e.message,
+                        code: e.getStatusCode(),
+                        data: e.getInfo()
+                    });
+                    return;
+                }
+                throw e;
+            }
+        });
+    }
+
+    public delete<RequestType, ResponseType>(path: string, requestHandler: (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>, validator?: Validator<RequestType>, permission?: { resource: string; action: string }): void {
+        this.app.delete(path, cors(), async (req: Request, res: Response) => {
+            const ctx = ContextFactory.createRequestContext(path, "dummy", "DELETE")
+            try {
+                const auth = await this.authenticate(req);
+
+                if (permission) {
+                    this.checkPermission(auth, permission.resource, permission.action);
+                }
+
+                const request = {};
+
+                // DELETE requests may carry a body (e.g. soft-delete payloads); parse it if present.
+                for (const key in req.body) {
+                    request[key] = req.body[key];
+                }
+
+                for (const key in req.params) {
+                    request[key] = !isNaN(Number(req.params[key])) ? parseInt(req.params[key]) : req.params[key];
+                }
+
+                if (validator != null) {
+                    const errors = validator.validate(request);
+                    if (errors != null) {
+                        throw ServiceError.build("Validation Error", 400, {errors: errors});
+                    }
+                }
+
+                const response = await requestHandler(ctx, auth, request as RequestType);
+                this.logger.info(ctx, "", {statusCode: 200});
+
+                if (this.isFileResponse(response)) {
+                    this.handleFileResponse(res, response);
+                } else if (this.isBufferResponse(response)) {
+                    this.handleBufferResponse(res, response);
+                } else {
+                    res.send(this.encapsulateResponse(response, 200));
+                }
+            } catch (e) {
+                if (e instanceof ServiceError) {
+                    this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
+                    res.status(e.getStatusCode()).send({
+                        message: e.message,
+                        code: e.getStatusCode(),
+                        data: e.getInfo()
+                    });
+                    return;
+                }
+                throw e;
+            }
+        });
+    }
+
     private encapsulateResponse<ResponseType>(response: ResponseType, code: number, message?: string): ResponseObject<ResponseType> {
         return {
             data: response,
