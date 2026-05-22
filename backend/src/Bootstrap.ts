@@ -22,7 +22,7 @@ import {UserRepository} from "./database/repositories/UserRepository";
 import {SessionRepository} from "./database/repositories/SessionRepository";
 import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
 import {AppDataSource} from "./database/data-source";
-import {RateLimitTracker, SportmonksClient} from "./sportmonks";
+import {LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksClient} from "./sportmonks";
 
 export class Bootstrap {
 
@@ -31,6 +31,13 @@ export class Bootstrap {
     // Held on the instance so future issues (#5 metrics, #6 fixture poller) can wire them up.
     private rateLimitTracker?: RateLimitTracker;
     private sportmonksClient?: SportmonksClient;
+    // NOTE (#7): the upcoming `FixturePoller` consumes both of these — it pulls active
+    // fixture IDs from the `SessionFixtureProvider` and writes results into the
+    // `LiveSnapshotStore`. We construct them here so the wiring lands in one place.
+    private liveSnapshotStore?: LiveSnapshotStore;
+    // NOTE (#7): provider is constructed inside `setup()` once the DB is initialised,
+    // because `SessionFixtureRepository` resolves the TypeORM connection eagerly.
+    private sessionFixtureProvider?: SessionFixtureProvider;
 
     async setup() {
         this.app.use(cors({
@@ -81,6 +88,11 @@ export class Bootstrap {
         const sessionFixtureRepository = new SessionFixtureRepository();
         const sessionController = new SessionController(sessionRepository, sessionFixtureRepository);
 
+        // NOTE (#7): construct the default fixture-selection provider now that the
+        // repository's TypeORM connection is live. The poller added in #7 will
+        // depend on this instance.
+        this.sessionFixtureProvider = new SessionFixtureProvider(sessionFixtureRepository);
+
         // Authenticated routes
         const authRouter = new UserAuthRouter(this.app, publicKey);
         authRouter.get("/users/info", userController.get);
@@ -126,6 +138,10 @@ export class Bootstrap {
             {apiToken, baseUrl},
             this.rateLimitTracker,
         );
+        // NOTE (#7): the live snapshot store is created up-front so the poller added
+        // in #7 can be wired in without a follow-up refactor. The store self-updates
+        // the `sportmonks_live_fixtures_in_memory` gauge defined in `./sportmonks/metrics.ts`.
+        this.liveSnapshotStore = new LiveSnapshotStore();
         this.logger.info(ctx, "SportMonks client configured", {base_url: baseUrl});
     }
 
