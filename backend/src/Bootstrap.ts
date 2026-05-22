@@ -8,6 +8,7 @@ import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
 import {Context, ContextFactory} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
+import {MetricsController} from "./controller/MetricsController";
 import {
     AttachFixtureValidator,
     CreateSessionValidator,
@@ -40,8 +41,7 @@ export class Bootstrap {
 
         // SportMonks integration (ADR 0001). Read config + fail fast when enabled but
         // misconfigured, before touching the database — this is a pure env-var check.
-        // The client is held on the instance for use by issues #5/#6; no routes are
-        // registered yet.
+        // The client is held on the instance for use by the fixture poller (#6).
         this.configureSportmonks();
 
         // Initialize TypeORM connection
@@ -62,10 +62,20 @@ export class Bootstrap {
         const publicKey = Buffer.from(publicKeyStr, 'base64');
 
         const userController = new UserController(userRepository, privateKey);
+        const metricsController = new MetricsController();
 
         // Public routes
         const router = new NoAuthRouter(this.app);
         router.post("/auth/login", userController.login, new LoginValidator());
+
+        // Prometheus scrape endpoint. Registered on `NoAuthRouter` so it
+        // bypasses JWT auth (scrapers shouldn't manage credentials — protect
+        // it at the network layer in production) while still flowing through
+        // `BaseRouter` for logging and error handling. The handler returns a
+        // `RawResponse`, which `BaseRouter` recognises and dispatches without
+        // wrapping in the `{data, code}` JSON envelope (the exposition format
+        // is plain-text). See backend/CLAUDE.md "Observability".
+        router.get("/metrics", metricsController.handle);
 
         const sessionRepository = new SessionRepository();
         const sessionFixtureRepository = new SessionFixtureRepository();
