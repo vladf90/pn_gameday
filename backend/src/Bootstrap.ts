@@ -23,7 +23,14 @@ import {UserRepository} from "./database/repositories/UserRepository";
 import {SessionRepository} from "./database/repositories/SessionRepository";
 import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
 import {AppDataSource} from "./database/data-source";
-import {FixturePoller, LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksHttpClient} from "./sportmonks";
+import {
+    FixturePoller,
+    FixturesClient,
+    LiveSnapshotStore,
+    RateLimitTracker,
+    SessionFixtureProvider,
+    SportmonksHttpClient,
+} from "./sportmonks";
 
 export class Bootstrap {
 
@@ -129,8 +136,9 @@ export class Bootstrap {
         // skip wiring entirely — the integration is a no-op in that mode.
         const ctx = ContextFactory.createProcessContext("sportmonks-poller");
         if (this.sportmonksClient && this.sessionFixtureProvider && this.liveSnapshotStore) {
+            const fixturesClient = new FixturesClient(this.sportmonksClient);
             this.fixturePoller = new FixturePoller(
-                this.sportmonksClient,
+                fixturesClient,
                 this.sessionFixtureProvider,
                 this.liveSnapshotStore,
                 {
