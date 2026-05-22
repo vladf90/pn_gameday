@@ -18,7 +18,7 @@ export const FixturesByDate: React.FC = () => {
         setError(null);
         try {
             const data = await client.getByDate(target.format("YYYY-MM-DD"));
-            setFixtures(data);
+            setFixtures(Array.isArray(data) ? data : []);
         } catch (e) {
             const message = e instanceof Error ? e.message : "Failed to load fixtures";
             setError(message);
