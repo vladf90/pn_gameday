@@ -78,6 +78,9 @@ importers:
         specifier: ^3.2.1
         version: 3.19.0
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^8.4.1
+        version: 8.4.1
       '@types/bcrypt':
         specifier: ^3.0.0
         version: 3.0.1
@@ -110,7 +113,7 @@ importers:
         version: 10.9.2(@swc/core@1.15.33)(@types/node@18.19.130)(typescript@4.9.5)
       typeorm-extension:
         specifier: ^3.7.1
-        version: 3.9.0(@faker-js/faker@10.4.0)(typeorm@0.3.30(mysql2@2.3.3)(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@18.19.130)(typescript@4.9.5)))
+        version: 3.9.0(@faker-js/faker@8.4.1)(typeorm@0.3.30(mysql2@2.3.3)(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@18.19.130)(typescript@4.9.5)))
       typescript:
         specifier: ^4.9.5
         version: 4.9.5
@@ -440,9 +443,9 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@faker-js/faker@10.4.0':
-    resolution: {integrity: sha512-sDBWI3yLy8EcDzgobvJTWq1MJYzAkQdpjXuPukga9wXonhpMRvd1Izuo2Qgwey2OiEoRIBr35RMU9HJRoOHzpw==}
-    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
+  '@faker-js/faker@8.4.1':
+    resolution: {integrity: sha512-XQ3cU+Q8Uqmrbf2e0cIC/QN43sTBSC8KF12u29Mb47tWrt2hAgBXSgpZMj4Ao8Uk0iJcU99QsOCaIL8934obCg==}
+    engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0, npm: '>=6.14.13'}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -3794,7 +3797,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@faker-js/faker@10.4.0': {}
+  '@faker-js/faker@8.4.1': {}
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -7122,9 +7125,9 @@ snapshots:
       possible-typed-array-names: 1.1.0
       reflect.getprototypeof: 1.0.10
 
-  typeorm-extension@3.9.0(@faker-js/faker@10.4.0)(typeorm@0.3.30(mysql2@2.3.3)(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@18.19.130)(typescript@4.9.5))):
+  typeorm-extension@3.9.0(@faker-js/faker@8.4.1)(typeorm@0.3.30(mysql2@2.3.3)(pg@8.21.0)(ts-node@10.9.2(@swc/core@1.15.33)(@types/node@18.19.130)(typescript@4.9.5))):
     dependencies:
-      '@faker-js/faker': 10.4.0
+      '@faker-js/faker': 8.4.1
       consola: 3.4.2
       envix: 1.5.0
       locter: 2.2.1
