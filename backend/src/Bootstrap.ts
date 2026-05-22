@@ -6,15 +6,19 @@ import {Application} from "express";
 import {Logger} from "./Logger";
 import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
-import {Context} from "./Logger/Context";
+import {Context, ContextFactory} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
 import {UserRepository} from "./database/repositories/UserRepository";
 import {AppDataSource} from "./database/data-source";
+import {RateLimitTracker, SportmonksClient} from "./sportmonks";
 
 export class Bootstrap {
 
     private app: Application = express();
     private logger = new Logger("Bootstrap");
+    // Held on the instance so future issues (#5 metrics, #6 fixture poller) can wire them up.
+    private rateLimitTracker?: RateLimitTracker;
+    private sportmonksClient?: SportmonksClient;
 
     async setup() {
         this.app.use(cors({
@@ -22,6 +26,12 @@ export class Bootstrap {
         }));
         this.app.use(express.json());
         this.app.use(fileUpload() as express.RequestHandler);
+
+        // SportMonks integration (ADR 0001). Read config + fail fast when enabled but
+        // misconfigured, before touching the database — this is a pure env-var check.
+        // The client is held on the instance for use by issues #5/#6; no routes are
+        // registered yet.
+        this.configureSportmonks();
 
         // Initialize TypeORM connection
         await AppDataSource.initialize();
@@ -49,6 +59,34 @@ export class Bootstrap {
         // Authenticated routes
         const authRouter = new UserAuthRouter(this.app, publicKey);
         authRouter.get("/users/info", userController.get);
+    }
+
+    private configureSportmonks() {
+        // Default: enabled. Only the literal string "false" disables it, so a
+        // typo can't accidentally turn the integration off in production.
+        const enabled = process.env.SPORTMONKS_ENABLED !== "false";
+        const ctx = ContextFactory.createProcessContext("sportmonks");
+        if (!enabled) {
+            this.logger.info(ctx, "SportMonks integration disabled via SPORTMONKS_ENABLED=false");
+            return;
+        }
+
+        const apiToken = process.env.SPORTMONKS_API_TOKEN;
+        if (!apiToken) {
+            throw new Error(
+                "SPORTMONKS_API_TOKEN must be set when SPORTMONKS_ENABLED is not 'false'. " +
+                "Set SPORTMONKS_ENABLED=false to run without the SportMonks integration."
+            );
+        }
+
+        const baseUrl = process.env.SPORTMONKS_BASE_URL ?? "https://api.sportmonks.com/v3/football";
+
+        this.rateLimitTracker = new RateLimitTracker();
+        this.sportmonksClient = new SportmonksClient(
+            {apiToken, baseUrl},
+            this.rateLimitTracker,
+        );
+        this.logger.info(ctx, "SportMonks client configured", {base_url: baseUrl});
     }
 
     async boot(ctx: Context, config: Config) {
