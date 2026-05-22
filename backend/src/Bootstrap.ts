@@ -23,7 +23,7 @@ import {UserRepository} from "./database/repositories/UserRepository";
 import {SessionRepository} from "./database/repositories/SessionRepository";
 import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
 import {AppDataSource} from "./database/data-source";
-import {FixturePoller, LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksClient} from "./sportmonks";
+import {FixturePoller, LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksHttpClient} from "./sportmonks";
 
 export class Bootstrap {
 
@@ -32,7 +32,7 @@ export class Bootstrap {
     // SportMonks deps — held on the instance so the fixture poller can pick them up
     // once the DB-backed dependencies (provider) are constructed inside `setup()`.
     private rateLimitTracker?: RateLimitTracker;
-    private sportmonksClient?: SportmonksClient;
+    private sportmonksClient?: SportmonksHttpClient;
     private liveSnapshotStore?: LiveSnapshotStore;
     // Provider is constructed inside `setup()` once the DB is initialised,
     // because `SessionFixtureRepository` resolves the TypeORM connection eagerly.
@@ -172,7 +172,7 @@ export class Bootstrap {
         );
 
         this.rateLimitTracker = new RateLimitTracker();
-        this.sportmonksClient = new SportmonksClient(
+        this.sportmonksClient = new SportmonksHttpClient(
             {apiToken, baseUrl},
             this.rateLimitTracker,
         );

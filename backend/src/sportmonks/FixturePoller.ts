@@ -2,7 +2,7 @@ import {Logger} from "../Logger";
 import {ContextFactory} from "../Logger/Context";
 import {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 import {LiveSnapshotStore} from "./LiveSnapshotStore";
-import {SportmonksClient} from "./SportmonksClient";
+import {SportmonksHttpClient} from "./clients/SportmonksHttpClient";
 import {
     sportmonksActiveFixtureIds,
     sportmonksPollerLastSuccessTimestamp,
@@ -26,7 +26,7 @@ export interface FixturePollerOptions {
  *     one completes (success or failure).
  *   - Errors inside a tick are caught and logged; the loop continues. We do
  *     not re-increment `sportmonks_api_calls_total{status="error"}` here
- *     because `SportmonksClient.get()` already increments it on failure.
+ *     because `SportmonksHttpClient.get()` already increments it on failure.
  *   - `sportmonks_poller_last_success_timestamp` is only updated when every
  *     batch in a tick succeeded (or the active set was empty).
  *   - `stop()` returns a promise that resolves once any in-flight tick has
@@ -42,7 +42,7 @@ export class FixturePoller {
     private inFlight: Promise<void> | undefined;
 
     constructor(
-        private readonly client: SportmonksClient,
+        private readonly client: SportmonksHttpClient,
         private readonly provider: FixtureSelectionProvider,
         private readonly store: LiveSnapshotStore,
         private readonly options: FixturePollerOptions,
@@ -131,13 +131,13 @@ export class FixturePoller {
                 // argument. `endpointLabel` strips the comma-joined ID list
                 // so metrics aggregate as `/fixtures/multi`.
                 const path = `/fixtures/multi/${batch.join(",")}`;
-                const result = await this.client.get<LiveFixture[]>(
+                const fixtures = await this.client.get<LiveFixture[]>(
                     path,
                     {include: "scores;state;events;participants;statistics"},
                     {entity: "Fixture", ctx},
                 );
-                if (Array.isArray(result.data)) {
-                    for (const fixture of result.data) {
+                if (Array.isArray(fixtures)) {
+                    for (const fixture of fixtures) {
                         collected.push(fixture);
                     }
                 }
