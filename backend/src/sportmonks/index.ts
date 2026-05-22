@@ -7,6 +7,7 @@ export {
 export {FixturesClient, FixturesQueryOptions} from "./clients/FixturesClient";
 export {LeaguesClient, LeaguesQueryOptions} from "./clients/LeaguesClient";
 export {LivescoresClient, LivescoresQueryOptions} from "./clients/LivescoresClient";
+export {SeasonsClient, SeasonsQueryOptions} from "./clients/SeasonsClient";
 export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";
@@ -21,6 +22,8 @@ export {
     Livescore,
     LivescoreInclude,
     RateLimit,
+    Season,
+    SeasonInclude,
     SportmonksRateLimitBlock,
     SportmonksResponseEnvelope,
 } from "./types";
