@@ -1,4 +1,9 @@
-export {SportmonksClient, SportmonksClientConfig, SportmonksHttpError, SportmonksGetResult, GetOptions} from "./SportmonksClient";
+export {
+    SportmonksHttpClient,
+    SportmonksHttpClientConfig,
+    SportmonksHttpError,
+    GetOptions,
+} from "./clients/SportmonksHttpClient";
 export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";

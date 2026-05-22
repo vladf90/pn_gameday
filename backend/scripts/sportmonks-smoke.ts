@@ -12,7 +12,7 @@ import * as dotenv from "dotenv";
 dotenv.config({path: "../.env"});
 dotenv.config({path: ".env"});
 
-import {RateLimitTracker, SportmonksClient} from "../src/sportmonks";
+import {RateLimitTracker, SportmonksHttpClient} from "../src/sportmonks";
 
 async function main() {
     const token = process.env.SPORTMONKS_API_TOKEN;
@@ -23,7 +23,7 @@ async function main() {
     }
 
     const tracker = new RateLimitTracker();
-    const client = new SportmonksClient(
+    const client = new SportmonksHttpClient(
         {
             apiToken: token,
             baseUrl: process.env.SPORTMONKS_BASE_URL ?? "https://api.sportmonks.com/v3/football",
@@ -33,11 +33,9 @@ async function main() {
 
     // `/core/my/usage` lives at the `/core` root, not `/football` — pass an
     // absolute override via baseUrl if your token is on a sport other than football.
-    const result = await client.get<unknown>("/core/my/usage", undefined, {entity: "usage"});
+    const data = await client.get<unknown>("/core/my/usage", undefined, {entity: "usage"});
     // eslint-disable-next-line no-console
-    console.log("data:", JSON.stringify(result.data, null, 2));
-    // eslint-disable-next-line no-console
-    console.log("rate_limit:", result.rateLimit);
+    console.log("data:", JSON.stringify(data, null, 2));
     // eslint-disable-next-line no-console
     console.log("tracker.getAll():", tracker.getAll());
 }

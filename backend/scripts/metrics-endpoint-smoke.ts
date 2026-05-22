@@ -11,7 +11,7 @@
 import * as express from "express";
 import {MetricsController} from "../src/controller/MetricsController";
 import {NoAuthRouter} from "../src/router/NoAuthRouter";
-import {RateLimitTracker, SportmonksClient} from "../src/sportmonks";
+import {RateLimitTracker, SportmonksHttpClient} from "../src/sportmonks";
 
 async function main() {
     // Drive one stubbed call so SportMonks-specific metrics have non-zero values.
@@ -24,7 +24,7 @@ async function main() {
             }),
             {status: 200, headers: {"content-type": "application/json"}},
         );
-    const client = new SportmonksClient(
+    const client = new SportmonksHttpClient(
         {apiToken: "stub", baseUrl: "https://example.invalid", fetchImpl: stubbedFetch},
         tracker,
     );

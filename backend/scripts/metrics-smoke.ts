@@ -12,7 +12,7 @@
  * Usage (from repo root):
  *   pnpm --filter backend exec ts-node scripts/metrics-smoke.ts
  */
-import {RateLimitTracker, SportmonksClient, register} from "../src/sportmonks";
+import {RateLimitTracker, SportmonksHttpClient, register} from "../src/sportmonks";
 
 const REQUIRED_METRIC_NAMES = [
     "sportmonks_api_calls_total",
@@ -48,7 +48,7 @@ async function main() {
         );
     };
 
-    const client = new SportmonksClient(
+    const client = new SportmonksHttpClient(
         {
             apiToken: "stub-token-not-used",
             baseUrl: "https://example.invalid",
