@@ -2,7 +2,7 @@ import {Logger} from "../Logger";
 import {ContextFactory} from "../Logger/Context";
 import {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 import {LiveSnapshotStore} from "./LiveSnapshotStore";
-import {SportmonksHttpClient} from "./clients/SportmonksHttpClient";
+import {FixturesClient} from "./clients/FixturesClient";
 import {
     sportmonksActiveFixtureIds,
     sportmonksPollerLastSuccessTimestamp,
@@ -26,7 +26,8 @@ export interface FixturePollerOptions {
  *     one completes (success or failure).
  *   - Errors inside a tick are caught and logged; the loop continues. We do
  *     not re-increment `sportmonks_api_calls_total{status="error"}` here
- *     because `SportmonksHttpClient.get()` already increments it on failure.
+ *     because `SportmonksHttpClient.get()` (called via `FixturesClient`)
+ *     already increments it on failure.
  *   - `sportmonks_poller_last_success_timestamp` is only updated when every
  *     batch in a tick succeeded (or the active set was empty).
  *   - `stop()` returns a promise that resolves once any in-flight tick has
@@ -42,7 +43,7 @@ export class FixturePoller {
     private inFlight: Promise<void> | undefined;
 
     constructor(
-        private readonly client: SportmonksHttpClient,
+        private readonly client: FixturesClient,
         private readonly provider: FixtureSelectionProvider,
         private readonly store: LiveSnapshotStore,
         private readonly options: FixturePollerOptions,
@@ -127,15 +128,10 @@ export class FixturePoller {
             const batches = this.chunk(activeIds, this.options.batchSize);
             const collected: LiveFixture[] = [];
             for (const batch of batches) {
-                // Path-only — the client appends query params from the second
-                // argument. `endpointLabel` strips the comma-joined ID list
-                // so metrics aggregate as `/fixtures/multi`.
-                const path = `/fixtures/multi/${batch.join(",")}`;
-                const fixtures = await this.client.get<LiveFixture[]>(
-                    path,
-                    {include: "scores;state;events;participants;statistics"},
-                    {entity: "Fixture", ctx},
-                );
+                const fixtures = await this.client.getMulti<LiveFixture>(batch, {
+                    includes: ["scores", "state", "events", "participants", "statistics"],
+                    ctx,
+                });
                 if (Array.isArray(fixtures)) {
                     for (const fixture of fixtures) {
                         collected.push(fixture);
