@@ -5,5 +5,6 @@ export {Livescore, LivescoreInclude} from "./Livescore";
 export {Season, SeasonInclude} from "./Season";
 export {Standing, StandingInclude} from "./Standing";
 export {Statistic, StatisticInclude, StatisticParticipantType} from "./Statistic";
+export {Topscorer, TopscorerInclude} from "./Topscorer";
 export {RateLimit} from "./RateLimit";
 export {SportmonksRateLimitBlock, SportmonksResponseEnvelope} from "./SportmonksResponse";

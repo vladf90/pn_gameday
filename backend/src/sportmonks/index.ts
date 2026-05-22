@@ -10,6 +10,7 @@ export {LivescoresClient, LivescoresQueryOptions} from "./clients/LivescoresClie
 export {SeasonsClient, SeasonsQueryOptions} from "./clients/SeasonsClient";
 export {StandingsClient, StandingsQueryOptions} from "./clients/StandingsClient";
 export {StatisticsClient, StatisticsQueryOptions} from "./clients/StatisticsClient";
+export {TopscorersClient, TopscorersQueryOptions} from "./clients/TopscorersClient";
 export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";
@@ -33,6 +34,8 @@ export {
     Statistic,
     StatisticInclude,
     StatisticParticipantType,
+    Topscorer,
+    TopscorerInclude,
 } from "./types";
 export {
     endpointLabel,
