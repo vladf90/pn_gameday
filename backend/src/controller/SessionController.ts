@@ -8,13 +8,19 @@ import * as HttpStatusCodes from "http-status-codes";
 import { ObjectValidator } from "../validator/ObjectValidator";
 import { StringValidator } from "../validator/StringValidator";
 import { NumberValidator } from "../validator/NumberValidator";
+import { LiveSnapshotStore, LiveFixture } from "../sportmonks";
 
 export class SessionController {
     private readonly logger = new Logger("SessionController");
 
+    // `liveSnapshotStore` is optional: when `SPORTMONKS_ENABLED=false`,
+    // Bootstrap never constructs it, but the route stays mounted so callers
+    // get a stable contract — the response just reports every session fixture
+    // as missing.
     constructor(
         private readonly sessionRepository: SessionRepository,
         private readonly sessionFixtureRepository: SessionFixtureRepository,
+        private readonly liveSnapshotStore: LiveSnapshotStore | undefined,
     ) {}
 
     getAll = async (_ctx: Context, _auth: UserAuth): Promise<SessionSummary[]> => {
@@ -31,6 +37,35 @@ export class SessionController {
         return {
             ...toSessionSummary(session),
             fixtureIds: fixtures.map(f => f.sportmonksFixtureId),
+        };
+    };
+
+    /**
+     * Returns the in-memory live snapshot subset for a session.
+     *
+     * IMPORTANT: this handler MUST NOT make any outbound SportMonks call. The
+     * snapshot is populated asynchronously by `FixturePoller` (#7); this read
+     * path only joins `session_fixture` → `LiveSnapshotStore`. Fixtures the
+     * poller has not yet fetched are surfaced in `missingFixtureIds` rather
+     * than triggering a synchronous fetch.
+     */
+    getLive = async (_ctx: Context, _auth: UserAuth, request: GetLiveSessionRequest): Promise<GetLiveSessionResponse> => {
+        const session = await this.sessionRepository.findById(request.id);
+        if (!session) {
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+        const fixtureIds = await this.sessionFixtureRepository.findSportmonksFixtureIdsBySessionId(session.id);
+        // When SportMonks is disabled, the snapshot store is `undefined`; treat
+        // every fixture as missing rather than failing the request.
+        const fixtures: LiveFixture[] = this.liveSnapshotStore
+            ? this.liveSnapshotStore.getMany(fixtureIds)
+            : [];
+        const presentIds = new Set(fixtures.map(f => f.id));
+        const missingFixtureIds = fixtureIds.filter(id => !presentIds.has(id));
+        return {
+            sessionId: session.id,
+            fixtures,
+            missingFixtureIds,
         };
     };
 
@@ -119,6 +154,16 @@ export interface GetSessionRequest {
     id: number;
 }
 
+export interface GetLiveSessionRequest {
+    id: number;
+}
+
+export interface GetLiveSessionResponse {
+    sessionId: number;
+    fixtures: LiveFixture[];
+    missingFixtureIds: number[];
+}
+
 export interface CreateSessionRequest {
     name: string;
 }
@@ -148,6 +193,13 @@ export interface DetachFixtureRequest {
 }
 
 export class GetSessionValidator extends ObjectValidator<GetSessionRequest> {
+    constructor() {
+        super();
+        this.add("id", new NumberValidator());
+    }
+}
+
+export class GetLiveSessionValidator extends ObjectValidator<GetLiveSessionRequest> {
     constructor() {
         super();
         this.add("id", new NumberValidator());

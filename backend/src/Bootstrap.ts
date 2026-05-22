@@ -14,6 +14,7 @@ import {
     CreateSessionValidator,
     DeleteSessionValidator,
     DetachFixtureValidator,
+    GetLiveSessionValidator,
     GetSessionValidator,
     SessionController,
     UpdateSessionValidator,
@@ -86,7 +87,14 @@ export class Bootstrap {
 
         const sessionRepository = new SessionRepository();
         const sessionFixtureRepository = new SessionFixtureRepository();
-        const sessionController = new SessionController(sessionRepository, sessionFixtureRepository);
+        // `liveSnapshotStore` is `undefined` when SportMonks is disabled — the
+        // controller treats that case by returning every fixture as missing
+        // (see SessionController#getLive).
+        const sessionController = new SessionController(
+            sessionRepository,
+            sessionFixtureRepository,
+            this.liveSnapshotStore,
+        );
 
         // NOTE (#7): construct the default fixture-selection provider now that the
         // repository's TypeORM connection is live. The poller added in #7 will
@@ -100,6 +108,8 @@ export class Bootstrap {
         authRouter.get("/sessions", sessionController.getAll, undefined,
             { resource: 'session', action: 'read' });
         authRouter.get("/sessions/:id", sessionController.get, new GetSessionValidator(),
+            { resource: 'session', action: 'read' });
+        authRouter.get("/sessions/:id/live", sessionController.getLive, new GetLiveSessionValidator(),
             { resource: 'session', action: 'read' });
         authRouter.post("/sessions", sessionController.create, new CreateSessionValidator(),
             { resource: 'session', action: 'create' });
