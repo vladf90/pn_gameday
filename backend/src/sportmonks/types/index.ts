@@ -1,4 +1,5 @@
 export {LiveFixture} from "./LiveFixture";
+export {FixtureByDate} from "./FixtureByDate";
 export {Fixture, FixtureInclude} from "./Fixture";
 export {League, LeagueInclude} from "./League";
 export {Livescore, LivescoreInclude} from "./Livescore";

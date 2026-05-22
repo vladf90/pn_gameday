@@ -20,6 +20,7 @@ export {SessionFixtureProvider} from "./SessionFixtureProvider";
 export {FixturePoller, FixturePollerOptions} from "./FixturePoller";
 export {
     Fixture,
+    FixtureByDate,
     FixtureInclude,
     League,
     LeagueInclude,

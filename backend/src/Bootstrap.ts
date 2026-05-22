@@ -19,6 +19,7 @@ import {
     SessionController,
     UpdateSessionValidator,
 } from "./controller/SessionController";
+import {FixtureController, GetFixturesByDateValidator} from "./controller/FixtureController";
 import {UserRepository} from "./database/repositories/UserRepository";
 import {SessionRepository} from "./database/repositories/SessionRepository";
 import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
@@ -94,6 +95,15 @@ export class Bootstrap {
         // wrapping in the `{data, code}` JSON envelope (the exposition format
         // is plain-text). See backend/CLAUDE.md "Observability".
         router.get("/metrics", metricsController.handle);
+
+        // Public fixtures-by-day endpoint (ADR 0003). Mounted only when the
+        // SportMonks integration is enabled — otherwise the route is absent
+        // (404), matching how the poller is wired below.
+        if (this.sportmonksClient) {
+            const fixturesClient = new FixturesClient(this.sportmonksClient);
+            const fixtureController = new FixtureController(fixturesClient);
+            router.get("/fixtures", fixtureController.getByDate, new GetFixturesByDateValidator());
+        }
 
         const sessionRepository = new SessionRepository();
         const sessionFixtureRepository = new SessionFixtureRepository();
