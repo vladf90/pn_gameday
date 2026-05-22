@@ -3,6 +3,8 @@ import { DataSource, DataSourceOptions } from "typeorm";
 import { SeederOptions } from "typeorm-extension";
 import * as dotenv from "dotenv";
 import { User } from "./entities/User";
+import { Session } from "./entities/Session";
+import { SessionFixture } from "./entities/SessionFixture";
 
 dotenv.config({ path: '../.env' });
 
@@ -17,7 +19,7 @@ export const AppDataSource = new DataSource({
     database: process.env.DB_DATABASE,
     synchronize: true,
     logging: environment === 'development',
-    entities: [User],
+    entities: [User, Session, SessionFixture],
     migrations: ["src/database/migrations/*.ts"],
     subscribers: ["src/database/subscribers/*.ts"],
     seeds: ["src/database/seeds/**/*.ts"],
