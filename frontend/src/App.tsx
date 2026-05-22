@@ -12,6 +12,7 @@ import { createAccessControlProvider } from "./providers/AccessControlProvider";
 import { AuthRequestClient } from "./clients/AuthRequestClient";
 import { Login } from "./Components/auth/Login";
 import { Home } from "./Components/home/Home";
+import { FixturesByDate } from "./Components/fixtures/FixturesByDate";
 
 const authRequestClient = new AuthRequestClient();
 const authProvider = createAuthProvider(authRequestClient);
@@ -33,6 +34,7 @@ const App: React.FC = () => {
                 >
                     <Routes>
                         <Route path="/login" element={<Login />} />
+                        <Route index element={<FixturesByDate />} />
                         <Route
                             element={
                                 <Authenticated
@@ -43,7 +45,7 @@ const App: React.FC = () => {
                                 </Authenticated>
                             }
                         >
-                            <Route index element={<Home />} />
+                            <Route path="/home" element={<Home />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
