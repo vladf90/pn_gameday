@@ -61,7 +61,9 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
                 const response = await requestHandler(ctx, auth, request as RequestType);
                 this.logger.info(ctx, "", {statusCode: 200});
 
-                if (this.isFileResponse(response)) {
+                if (this.isRawResponse(response)) {
+                    this.handleRawResponse(res, response);
+                } else if (this.isFileResponse(response)) {
                     this.handleFileResponse(res, response);
                 } else if (this.isBufferResponse(response)) {
                     this.handleBufferResponse(res, response);
@@ -146,6 +148,17 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         };
     }
 
+    private isRawResponse(response: unknown): response is RawResponse {
+        return response !== null &&
+               typeof response === 'object' &&
+               'body' in response &&
+               'contentType' in response &&
+               !('filename' in response) &&
+               (typeof (response as RawResponse).body === 'string' ||
+                (response as RawResponse).body instanceof Buffer) &&
+               typeof (response as RawResponse).contentType === 'string';
+    }
+
     private isFileResponse(response: unknown): response is FileResponse {
         return response !== null &&
                typeof response === 'object' &&
@@ -159,6 +172,11 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
 
     private isBufferResponse(response: unknown): response is Buffer {
         return response instanceof Buffer;
+    }
+
+    private handleRawResponse(res: Response, raw: RawResponse): void {
+        res.setHeader('Content-Type', raw.contentType);
+        res.send(raw.body);
     }
 
     private handleFileResponse(res: Response, fileResponse: FileResponse): void {
@@ -198,6 +216,20 @@ export interface FileResponse {
     filename: string;
     contentType: string;
     disposition?: 'inline' | 'attachment';
+}
+
+/**
+ * Plain-body response that bypasses the `{data, code}` JSON envelope while
+ * still flowing through `BaseRouter` (logging, error handling, etc.).
+ *
+ * Use this when the response payload follows a non-JSON wire format that a
+ * consumer parses directly — e.g. the Prometheus text exposition format on
+ * `/metrics`. Unlike `FileResponse`, no `Content-Disposition` header is set,
+ * so the body is rendered inline rather than offered as a download.
+ */
+export interface RawResponse {
+    body: string | Buffer;
+    contentType: string;
 }
 
 export class FileResponseHelper {

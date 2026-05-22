@@ -33,16 +33,6 @@ export class Bootstrap {
         // The client is held on the instance for use by the fixture poller (#6).
         this.configureSportmonks();
 
-        // Prometheus scrape endpoint. Registered unconditionally — Node runtime
-        // metrics flow regardless of SportMonks status, and scrapers shouldn't
-        // start failing just because the integration was disabled. Mounted
-        // directly on `app` (not via `NoAuthRouter`) because the Prometheus
-        // exposition format needs a plain-text body with its own content-type,
-        // which the `BaseRouter` JSON envelope would clobber. Auth is
-        // intentionally absent — see backend/CLAUDE.md "Observability".
-        const metricsController = new MetricsController();
-        this.app.get("/metrics", metricsController.handle);
-
         // Initialize TypeORM connection
         await AppDataSource.initialize();
 
@@ -61,10 +51,20 @@ export class Bootstrap {
         const publicKey = Buffer.from(publicKeyStr, 'base64');
 
         const userController = new UserController(userRepository, privateKey);
+        const metricsController = new MetricsController();
 
         // Public routes
         const router = new NoAuthRouter(this.app);
         router.post("/auth/login", userController.login, new LoginValidator());
+
+        // Prometheus scrape endpoint. Registered on `NoAuthRouter` so it
+        // bypasses JWT auth (scrapers shouldn't manage credentials — protect
+        // it at the network layer in production) while still flowing through
+        // `BaseRouter` for logging and error handling. The handler returns a
+        // `RawResponse`, which `BaseRouter` recognises and dispatches without
+        // wrapping in the `{data, code}` JSON envelope (the exposition format
+        // is plain-text). See backend/CLAUDE.md "Observability".
+        router.get("/metrics", metricsController.handle);
 
         // Authenticated routes
         const authRouter = new UserAuthRouter(this.app, publicKey);
