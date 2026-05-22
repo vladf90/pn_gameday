@@ -16,4 +16,16 @@ export interface IRouter<AuthType> {
         validator?: Validator<T>,
         permission?: { resource: string; action: string }
     ): void;
+    patch<T, R>(
+        path: string,
+        requestHandler: (ctx: Context, authType: AuthType, request: T) => Promise<R>,
+        validator?: Validator<T>,
+        permission?: { resource: string; action: string }
+    ): void;
+    delete<T, R>(
+        path: string,
+        requestHandler: (ctx: Context, authType: AuthType, request: T) => Promise<R>,
+        validator?: Validator<T>,
+        permission?: { resource: string; action: string }
+    ): void;
 }

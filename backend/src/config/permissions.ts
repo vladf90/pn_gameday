@@ -20,7 +20,12 @@ export const ROLES: Record<string, RoleDefinition> = {
     user: {
         name: 'User',
         description: 'Default authenticated user',
-        permissions: []
+        permissions: [
+            { resource: 'session', action: 'read' },
+            { resource: 'session', action: 'create' },
+            { resource: 'session', action: 'update' },
+            { resource: 'session', action: 'delete' }
+        ]
     }
 };
 

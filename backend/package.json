@@ -40,6 +40,7 @@
       "@types/lodash": "^4.14.155",
       "@types/pg": "^8.11.0",
       "@types/node": "^18.19.125",
+      "@faker-js/faker": "^8.4.1",
       "@types/validator": "^13.0.0",
       "ts-node": "^10.9.2",
       "typeorm-extension": "^3.7.1",
