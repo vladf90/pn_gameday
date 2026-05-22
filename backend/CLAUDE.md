@@ -74,11 +74,13 @@ Validators extend `ObjectValidator<T>` and register field validators in the cons
 ```typescript
 authRouter.get("/new-entities", controller.getAll, undefined,
     { resource: 'new_entity', action: 'read' });
+authRouter.get("/new-entities/:id", controller.get, undefined,
+    { resource: 'new_entity', action: 'read' });
 authRouter.post("/new-entities", controller.create, new CreateValidator(),
     { resource: 'new_entity', action: 'create' });
-authRouter.post("/new-entities/:id/update", controller.update, new UpdateValidator(),
+authRouter.patch("/new-entities/:id", controller.update, new UpdateValidator(),
     { resource: 'new_entity', action: 'update' });
-authRouter.post("/new-entities/:id/delete", controller.delete, new DeleteValidator(),
+authRouter.delete("/new-entities/:id", controller.delete, new DeleteValidator(),
     { resource: 'new_entity', action: 'delete' });
 ```
 
@@ -90,9 +92,16 @@ Add the new resource to the relevant role definitions.
 
 - All routes go through `BaseRouter` which wraps responses as `{ data: T, code: number, message?: string }`
 - Errors use `ServiceError.build(message, httpStatusCode)` — never throw raw errors
-- `POST` is used for create, update, and delete (not `PUT`/`DELETE`)
-- Update routes: `POST /<resource>/:id/update`
-- Delete routes: `POST /<resource>/:id/delete`
+- Use proper HTTP methods to express intent:
+  - `GET /<resource>` — list
+  - `GET /<resource>/:id` — fetch one
+  - `POST /<resource>` — create
+  - `PATCH /<resource>/:id` — update (partial; use `PUT` only when the request fully replaces the resource)
+  - `DELETE /<resource>/:id` — delete
+- Sub-resource associations follow the same shape:
+  - `POST /<resource>/:id/<sub-resource>` — add association
+  - `DELETE /<resource>/:id/<sub-resource>/:subId` — remove association
+- Non-CRUD actions keep an action segment in the path: `POST /<resource>/:id/<action>` (e.g. `POST /auth/login`, `POST /sessions/:id/start`)
 - URL params are auto-parsed as numbers when possible (see `BaseRouter.post()`)
 
 ## RBAC

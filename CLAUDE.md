@@ -40,7 +40,7 @@ pnpm seed:run            # Seed database
 
 - **Code language:** All code (variables, functions, comments, commit messages) in English
 - **Database naming:** Table names are **singular** `snake_case`; columns are `snake_case` in DB / `camelCase` as entity properties
-- **API style:** Uses `POST` for create/update/delete (e.g., `POST /resource/:id/update`, `POST /resource/:id/delete`)
+- **API style:** REST-style HTTP methods — `GET` (list/fetch), `POST` (create), `PATCH` (update), `DELETE` (delete). Non-CRUD actions keep an action path segment, e.g. `POST /auth/login`. See `backend/CLAUDE.md` for the full convention.
 
 ## Architecture (per-package)
 
