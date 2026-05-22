@@ -2,6 +2,7 @@ export {LiveFixture} from "./LiveFixture";
 export {Fixture, FixtureInclude} from "./Fixture";
 export {League, LeagueInclude} from "./League";
 export {Livescore, LivescoreInclude} from "./Livescore";
+export {Player, PlayerInclude} from "./Player";
 export {Season, SeasonInclude} from "./Season";
 export {Standing, StandingInclude} from "./Standing";
 export {Statistic, StatisticInclude, StatisticParticipantType} from "./Statistic";

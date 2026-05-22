@@ -7,6 +7,7 @@ export {
 export {FixturesClient, FixturesQueryOptions} from "./clients/FixturesClient";
 export {LeaguesClient, LeaguesQueryOptions} from "./clients/LeaguesClient";
 export {LivescoresClient, LivescoresQueryOptions} from "./clients/LivescoresClient";
+export {PlayersClient, PlayersQueryOptions} from "./clients/PlayersClient";
 export {SeasonsClient, SeasonsQueryOptions} from "./clients/SeasonsClient";
 export {StandingsClient, StandingsQueryOptions} from "./clients/StandingsClient";
 export {StatisticsClient, StatisticsQueryOptions} from "./clients/StatisticsClient";
@@ -25,6 +26,8 @@ export {
     LiveFixture,
     Livescore,
     LivescoreInclude,
+    Player,
+    PlayerInclude,
     RateLimit,
     Season,
     SeasonInclude,
