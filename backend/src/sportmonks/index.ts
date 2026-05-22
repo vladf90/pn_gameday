@@ -3,6 +3,7 @@ export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 export {SessionFixtureProvider} from "./SessionFixtureProvider";
+export {FixturePoller, FixturePollerOptions} from "./FixturePoller";
 export {LiveFixture, RateLimit, SportmonksRateLimitBlock, SportmonksResponseEnvelope} from "./types";
 export {
     endpointLabel,

@@ -22,22 +22,25 @@ import {UserRepository} from "./database/repositories/UserRepository";
 import {SessionRepository} from "./database/repositories/SessionRepository";
 import {SessionFixtureRepository} from "./database/repositories/SessionFixtureRepository";
 import {AppDataSource} from "./database/data-source";
-import {LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksClient} from "./sportmonks";
+import {FixturePoller, LiveSnapshotStore, RateLimitTracker, SessionFixtureProvider, SportmonksClient} from "./sportmonks";
 
 export class Bootstrap {
 
     private app: Application = express();
     private logger = new Logger("Bootstrap");
-    // Held on the instance so future issues (#5 metrics, #6 fixture poller) can wire them up.
+    // SportMonks deps — held on the instance so the fixture poller can pick them up
+    // once the DB-backed dependencies (provider) are constructed inside `setup()`.
     private rateLimitTracker?: RateLimitTracker;
     private sportmonksClient?: SportmonksClient;
-    // NOTE (#7): the upcoming `FixturePoller` consumes both of these — it pulls active
-    // fixture IDs from the `SessionFixtureProvider` and writes results into the
-    // `LiveSnapshotStore`. We construct them here so the wiring lands in one place.
     private liveSnapshotStore?: LiveSnapshotStore;
-    // NOTE (#7): provider is constructed inside `setup()` once the DB is initialised,
+    // Provider is constructed inside `setup()` once the DB is initialised,
     // because `SessionFixtureRepository` resolves the TypeORM connection eagerly.
     private sessionFixtureProvider?: SessionFixtureProvider;
+    private fixturePoller?: FixturePoller;
+    // Cached poller options, parsed from env in `configureSportmonks()` so the
+    // failure mode for malformed env values lands at boot, not at first tick.
+    private pollIntervalMs: number = 5000;
+    private multiFixtureBatchSize: number = 50;
 
     async setup() {
         this.app.use(cors({
@@ -88,9 +91,8 @@ export class Bootstrap {
         const sessionFixtureRepository = new SessionFixtureRepository();
         const sessionController = new SessionController(sessionRepository, sessionFixtureRepository);
 
-        // NOTE (#7): construct the default fixture-selection provider now that the
-        // repository's TypeORM connection is live. The poller added in #7 will
-        // depend on this instance.
+        // Default fixture-selection provider — needs the repository's TypeORM
+        // connection, so it's constructed here (after `AppDataSource.initialize()`).
         this.sessionFixtureProvider = new SessionFixtureProvider(sessionFixtureRepository);
 
         // Authenticated routes
@@ -111,6 +113,25 @@ export class Bootstrap {
             { resource: 'session', action: 'update' });
         authRouter.delete("/sessions/:id/fixtures/:fixtureId", sessionController.detachFixture, new DetachFixtureValidator(),
             { resource: 'session', action: 'update' });
+
+        // Bring up the SportMonks fixture poller once all its dependencies exist.
+        // When `SPORTMONKS_ENABLED=false` the client/store remain undefined and we
+        // skip wiring entirely — the integration is a no-op in that mode.
+        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
+        if (this.sportmonksClient && this.sessionFixtureProvider && this.liveSnapshotStore) {
+            this.fixturePoller = new FixturePoller(
+                this.sportmonksClient,
+                this.sessionFixtureProvider,
+                this.liveSnapshotStore,
+                {
+                    intervalMs: this.pollIntervalMs,
+                    batchSize: this.multiFixtureBatchSize,
+                },
+            );
+            this.fixturePoller.start();
+        } else {
+            this.logger.info(ctx, "Fixture poller not started — SportMonks integration disabled");
+        }
     }
 
     private configureSportmonks() {
@@ -133,16 +154,44 @@ export class Bootstrap {
 
         const baseUrl = process.env.SPORTMONKS_BASE_URL ?? "https://api.sportmonks.com/v3/football";
 
+        this.pollIntervalMs = this.parsePositiveInt(
+            process.env.SPORTMONKS_POLL_INTERVAL_MS, 5000, "SPORTMONKS_POLL_INTERVAL_MS",
+        );
+        this.multiFixtureBatchSize = this.parsePositiveInt(
+            process.env.SPORTMONKS_MULTI_FIXTURE_BATCH_SIZE, 50, "SPORTMONKS_MULTI_FIXTURE_BATCH_SIZE",
+        );
+
         this.rateLimitTracker = new RateLimitTracker();
         this.sportmonksClient = new SportmonksClient(
             {apiToken, baseUrl},
             this.rateLimitTracker,
         );
-        // NOTE (#7): the live snapshot store is created up-front so the poller added
-        // in #7 can be wired in without a follow-up refactor. The store self-updates
-        // the `sportmonks_live_fixtures_in_memory` gauge defined in `./sportmonks/metrics.ts`.
+        // Live snapshot store is owned at this scope so the poller (created later
+        // in `setup()`, once the DB-backed fixture provider exists) can write into
+        // the same instance. The store self-updates the
+        // `sportmonks_live_fixtures_in_memory` gauge from `./sportmonks/metrics.ts`.
         this.liveSnapshotStore = new LiveSnapshotStore();
-        this.logger.info(ctx, "SportMonks client configured", {base_url: baseUrl});
+        this.logger.info(ctx, "SportMonks client configured", {
+            base_url: baseUrl,
+            poll_interval_ms: this.pollIntervalMs,
+            batch_size: this.multiFixtureBatchSize,
+        });
+    }
+
+    /**
+     * Parse a positive integer from an env var, falling back to `fallback`
+     * when unset and throwing on malformed/non-positive values. Validation
+     * here means a misconfigured env crashes at boot instead of at first tick.
+     */
+    private parsePositiveInt(raw: string | undefined, fallback: number, name: string): number {
+        if (raw === undefined || raw === "") {
+            return fallback;
+        }
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            throw new Error(`${name} must be a positive integer (got "${raw}")`);
+        }
+        return parsed;
     }
 
     async boot(ctx: Context, config: Config) {
@@ -154,6 +203,20 @@ export class Bootstrap {
         process.on("unhandledRejection", (exception: Error) => {
             this.logger.exception(exception);
             process.exit(1);
+        });
+
+        // Graceful SIGTERM: drain the fixture poller's in-flight tick before
+        // exit so shutdown is deterministic (ADR 0001 — "Graceful shutdown on
+        // SIGTERM drains the in-flight request"). We deliberately do not touch
+        // SIGINT here — local dev relies on the default Ctrl+C behaviour.
+        process.on("SIGTERM", async () => {
+            this.logger.info(ctx, "SIGTERM received — shutting down");
+            try {
+                await this.fixturePoller?.stop();
+            } catch (e) {
+                this.logger.exception(e instanceof Error ? e : new Error(String(e)));
+            }
+            process.exit(0);
         });
 
         await this.setup();
