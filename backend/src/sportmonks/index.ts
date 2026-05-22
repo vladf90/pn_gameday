@@ -5,6 +5,7 @@ export {
     GetOptions,
 } from "./clients/SportmonksHttpClient";
 export {FixturesClient, FixturesQueryOptions} from "./clients/FixturesClient";
+export {LeaguesClient, LeaguesQueryOptions} from "./clients/LeaguesClient";
 export {LivescoresClient, LivescoresQueryOptions} from "./clients/LivescoresClient";
 export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
@@ -14,6 +15,8 @@ export {FixturePoller, FixturePollerOptions} from "./FixturePoller";
 export {
     Fixture,
     FixtureInclude,
+    League,
+    LeagueInclude,
     LiveFixture,
     Livescore,
     LivescoreInclude,
