@@ -96,15 +96,6 @@ export class Bootstrap {
         // is plain-text). See backend/CLAUDE.md "Observability".
         router.get("/metrics", metricsController.handle);
 
-        // Public fixtures-by-day endpoint (ADR 0003). Mounted only when the
-        // SportMonks integration is enabled — otherwise the route is absent
-        // (404), matching how the poller is wired below.
-        if (this.sportmonksClient) {
-            const fixturesClient = new FixturesClient(this.sportmonksClient);
-            const fixtureController = new FixtureController(fixturesClient);
-            router.get("/fixtures", fixtureController.getByDate, new GetFixturesByDateValidator());
-        }
-
         const sessionRepository = new SessionRepository();
         const sessionFixtureRepository = new SessionFixtureRepository();
         // `liveSnapshotStore` is `undefined` when SportMonks is disabled — the
@@ -123,6 +114,17 @@ export class Bootstrap {
         // Authenticated routes
         const authRouter = new UserAuthRouter(this.app, publicKey);
         authRouter.get("/users/info", userController.get);
+
+        // Fixtures-by-day endpoint (ADR 0004 supersedes ADR 0003's public-access
+        // decision). Mounted only when the SportMonks integration is enabled —
+        // otherwise the route is absent (404), matching how the poller is wired
+        // below.
+        if (this.sportmonksClient) {
+            const fixturesClient = new FixturesClient(this.sportmonksClient);
+            const fixtureController = new FixtureController(fixturesClient);
+            authRouter.get("/fixtures", fixtureController.getByDate, new GetFixturesByDateValidator(),
+                { resource: 'fixture', action: 'read' });
+        }
 
         authRouter.get("/sessions", sessionController.getAll, undefined,
             { resource: 'session', action: 'read' });

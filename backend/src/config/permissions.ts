@@ -24,7 +24,8 @@ export const ROLES: Record<string, RoleDefinition> = {
             { resource: 'session', action: 'read' },
             { resource: 'session', action: 'create' },
             { resource: 'session', action: 'update' },
-            { resource: 'session', action: 'delete' }
+            { resource: 'session', action: 'delete' },
+            { resource: 'fixture', action: 'read' }
         ]
     }
 };
