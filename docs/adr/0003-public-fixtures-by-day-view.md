@@ -1,6 +1,6 @@
 # ADR 0003 — Public Fixtures-by-Day View
 
-- **Status:** Proposed
+- **Status:** Superseded (partially) by [ADR 0004](0004-db-seeds-and-auth-gated-fixtures-view.md) — the public-access decision was reversed; the view now sits behind authentication.
 - **Date:** 2026-05-22
 - **Author:** Vlad Foamete
 

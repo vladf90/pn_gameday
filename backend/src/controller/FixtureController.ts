@@ -1,12 +1,14 @@
 import { Context } from "../Logger/Context";
 import { FixturesClient, FixtureByDate } from "../sportmonks";
+import { UserAuth } from "../router/UserAuthRouter";
 import { ObjectValidator } from "../validator/ObjectValidator";
 import { Validator, ValidatorError } from "../validator/Validator";
 
 /**
- * Public day-view endpoint. Proxies SportMonks `/fixtures/date/{date}` with
+ * Day-view endpoint. Proxies SportMonks `/fixtures/date/{date}` with
  * the minimum includes needed to render kickoff time, teams, league, and
- * live/final score. Registered on `NoAuthRouter` — see ADR 0003.
+ * live/final score. Auth-gated via `UserAuthRouter` — see ADR 0004 (which
+ * supersedes ADR 0003's public-access decision).
  */
 export class FixtureController {
 
@@ -14,7 +16,7 @@ export class FixtureController {
 
     getByDate = async (
         ctx: Context,
-        _auth: void,
+        _auth: UserAuth,
         request: GetFixturesByDateRequest,
     ): Promise<FixtureByDate[]> => {
         return this.fixturesClient.getByDate<FixtureByDate>(request.date, {
