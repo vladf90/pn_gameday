@@ -34,7 +34,6 @@ const App: React.FC = () => {
                 >
                     <Routes>
                         <Route path="/login" element={<Login />} />
-                        <Route index element={<FixturesByDate />} />
                         <Route
                             element={
                                 <Authenticated
@@ -45,6 +44,7 @@ const App: React.FC = () => {
                                 </Authenticated>
                             }
                         >
+                            <Route index element={<FixturesByDate />} />
                             <Route path="/home" element={<Home />} />
                         </Route>
                         <Route path="*" element={<Navigate to="/" replace />} />
