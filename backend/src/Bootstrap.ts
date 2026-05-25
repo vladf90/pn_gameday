@@ -14,6 +14,7 @@ import {
     CreateSessionValidator,
     DeleteSessionValidator,
     DetachFixtureValidator,
+    EndSessionValidator,
     GetLiveSessionValidator,
     GetSessionValidator,
     SessionController,
@@ -100,11 +101,15 @@ export class Bootstrap {
         const sessionFixtureRepository = new SessionFixtureRepository();
         // `liveSnapshotStore` is `undefined` when SportMonks is disabled — the
         // controller treats that case by returning every fixture as missing
-        // (see SessionController#getLive).
+        // (see SessionController#getLive). `PUBLIC_OVERLAY_BASE_URL` is the
+        // public origin the frontend serves from; when unset, session responses
+        // simply omit `overlayUrl` (ADR 0005).
+        const publicOverlayBaseUrl = process.env.PUBLIC_OVERLAY_BASE_URL || undefined;
         const sessionController = new SessionController(
             sessionRepository,
             sessionFixtureRepository,
             this.liveSnapshotStore,
+            publicOverlayBaseUrl,
         );
 
         // Default fixture-selection provider — needs the repository's TypeORM
@@ -138,6 +143,8 @@ export class Bootstrap {
             { resource: 'session', action: 'update' });
         authRouter.delete("/sessions/:id", sessionController.delete, new DeleteSessionValidator(),
             { resource: 'session', action: 'delete' });
+        authRouter.post("/sessions/:id/end", sessionController.end, new EndSessionValidator(),
+            { resource: 'session', action: 'update' });
         authRouter.post("/sessions/:id/fixtures", sessionController.attachFixture, new AttachFixtureValidator(),
             { resource: 'session', action: 'update' });
         authRouter.delete("/sessions/:id/fixtures/:fixtureId", sessionController.detachFixture, new DetachFixtureValidator(),

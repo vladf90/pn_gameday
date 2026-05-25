@@ -1,6 +1,6 @@
 import { Logger } from "../Logger";
 import { Context } from "../Logger/Context";
-import { SessionRepository } from "../database/repositories/SessionRepository";
+import { SessionRepository, SessionStatusFilter } from "../database/repositories/SessionRepository";
 import { SessionFixtureRepository } from "../database/repositories/SessionFixtureRepository";
 import { UserAuth } from "../router/UserAuthRouter";
 import { ServiceError } from "../utils/ServiceError";
@@ -9,6 +9,7 @@ import { ObjectValidator } from "../validator/ObjectValidator";
 import { StringValidator } from "../validator/StringValidator";
 import { NumberValidator } from "../validator/NumberValidator";
 import { LiveSnapshotStore, LiveFixture } from "../sportmonks";
+import { Session } from "../database/entities/Session";
 
 export class SessionController {
     private readonly logger = new Logger("SessionController");
@@ -17,25 +18,32 @@ export class SessionController {
     // Bootstrap never constructs it, but the route stays mounted so callers
     // get a stable contract — the response just reports every session fixture
     // as missing.
+    //
+    // `publicOverlayBaseUrl` is the public URL the frontend serves from
+    // (e.g. `http://localhost:5173`). When unset, responses omit `overlayUrl`
+    // rather than emit a malformed link — clients can fall back to computing
+    // one from `window.location.origin`.
     constructor(
         private readonly sessionRepository: SessionRepository,
         private readonly sessionFixtureRepository: SessionFixtureRepository,
         private readonly liveSnapshotStore: LiveSnapshotStore | undefined,
+        private readonly publicOverlayBaseUrl: string | undefined,
     ) {}
 
-    getAll = async (_ctx: Context, _auth: UserAuth): Promise<SessionSummary[]> => {
-        const sessions = await this.sessionRepository.findAll();
-        return sessions.map(toSessionSummary);
+    getAll = async (_ctx: Context, auth: UserAuth, request: ListSessionsRequest): Promise<SessionSummary[]> => {
+        const status = this.parseStatus(request.status);
+        const sessions = await this.sessionRepository.findByUserAndStatus(auth.id, status);
+        return sessions.map(s => this.toSessionSummary(s));
     };
 
-    get = async (_ctx: Context, _auth: UserAuth, request: GetSessionRequest): Promise<SessionDetail> => {
-        const session = await this.sessionRepository.findById(request.id);
+    get = async (_ctx: Context, auth: UserAuth, request: GetSessionRequest): Promise<SessionDetail> => {
+        const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
         if (!session) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
         const fixtures = await this.sessionFixtureRepository.findBySession(session.id);
         return {
-            ...toSessionSummary(session),
+            ...this.toSessionSummary(session),
             fixtureIds: fixtures.map(f => f.sportmonksFixtureId),
         };
     };
@@ -49,8 +57,8 @@ export class SessionController {
      * poller has not yet fetched are surfaced in `missingFixtureIds` rather
      * than triggering a synchronous fetch.
      */
-    getLive = async (_ctx: Context, _auth: UserAuth, request: GetLiveSessionRequest): Promise<GetLiveSessionResponse> => {
-        const session = await this.sessionRepository.findById(request.id);
+    getLive = async (_ctx: Context, auth: UserAuth, request: GetLiveSessionRequest): Promise<GetLiveSessionResponse> => {
+        const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
         if (!session) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
@@ -69,33 +77,50 @@ export class SessionController {
         };
     };
 
-    create = async (_ctx: Context, _auth: UserAuth, request: CreateSessionRequest): Promise<SessionSummary> => {
-        const session = await this.sessionRepository.create(request.name);
-        return toSessionSummary(session);
+    create = async (_ctx: Context, auth: UserAuth, request: CreateSessionRequest): Promise<SessionSummary> => {
+        const session = await this.sessionRepository.create(auth.id, request.name);
+        return this.toSessionSummary(session);
     };
 
-    update = async (_ctx: Context, _auth: UserAuth, request: UpdateSessionRequest): Promise<SessionSummary> => {
-        const updated = await this.sessionRepository.update(request.id, { name: request.name });
+    update = async (_ctx: Context, auth: UserAuth, request: UpdateSessionRequest): Promise<SessionSummary> => {
+        const updated = await this.sessionRepository.update(request.id, auth.id, { name: request.name });
         if (!updated) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
-        return toSessionSummary(updated);
+        return this.toSessionSummary(updated);
     };
 
-    delete = async (_ctx: Context, _auth: UserAuth, request: DeleteSessionRequest): Promise<{ id: number }> => {
-        const ok = await this.sessionRepository.delete(request.id);
+    delete = async (_ctx: Context, auth: UserAuth, request: DeleteSessionRequest): Promise<{ id: number }> => {
+        const ok = await this.sessionRepository.delete(request.id, auth.id);
         if (!ok) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
         return { id: request.id };
     };
 
+    /**
+     * Manual force-end. Per ADR 0005, the primary lifecycle mechanism is the
+     * auto-closer (issue #60); this endpoint lets a host end a session
+     * immediately (e.g. cancelled stream). Idempotent at the SQL layer — a
+     * second call observes `ended_at` already set and returns 409.
+     */
+    end = async (_ctx: Context, auth: UserAuth, request: EndSessionRequest): Promise<SessionSummary> => {
+        const result = await this.sessionRepository.markEnded(request.id, auth.id);
+        if (result.status === 'not_found') {
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+        if (result.status === 'already_ended') {
+            throw ServiceError.build("Session already ended", HttpStatusCodes.CONFLICT);
+        }
+        return this.toSessionSummary(result.session);
+    };
+
     attachFixture = async (
         _ctx: Context,
-        _auth: UserAuth,
+        auth: UserAuth,
         request: AttachFixtureRequest,
     ): Promise<AttachFixtureResponse> => {
-        const session = await this.sessionRepository.findById(request.id);
+        const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
         if (!session) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
@@ -114,40 +139,75 @@ export class SessionController {
 
     detachFixture = async (
         _ctx: Context,
-        _auth: UserAuth,
+        auth: UserAuth,
         request: DetachFixtureRequest,
     ): Promise<{ sessionId: number; sportmonksFixtureId: number }> => {
+        // Verify ownership before touching the join table — otherwise a request
+        // for someone else's session would 404 on `detach()` only because the
+        // (session_id, fixture_id) tuple doesn't match, which is a confusing
+        // error surface.
+        const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
+        if (!session) {
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
         const ok = await this.sessionFixtureRepository.detach(request.id, request.fixtureId);
         if (!ok) {
             throw ServiceError.build("Fixture not attached to session", HttpStatusCodes.NOT_FOUND);
         }
         return { sessionId: request.id, sportmonksFixtureId: request.fixtureId };
     };
-}
 
-function toSessionSummary(session: {
-    id: number;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-}): SessionSummary {
-    return {
-        id: session.id,
-        name: session.name,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-    };
+    private parseStatus(raw: unknown): SessionStatusFilter {
+        if (raw === 'active' || raw === 'ended' || raw === 'all') {
+            return raw;
+        }
+        if (raw === undefined || raw === '' || raw === null) {
+            return 'active';
+        }
+        throw ServiceError.build(
+            `Invalid status filter "${String(raw)}" — expected one of: active, ended, all`,
+            HttpStatusCodes.BAD_REQUEST,
+        );
+    }
+
+    private toSessionSummary(session: Session): SessionSummary {
+        const summary: SessionSummary = {
+            id: session.id,
+            name: session.name,
+            endedAt: session.endedAt,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt,
+        };
+        if (this.publicOverlayBaseUrl) {
+            // Trim trailing slash so concatenation stays clean regardless of
+            // operator habits (`http://host` vs `http://host/`).
+            const base = this.publicOverlayBaseUrl.replace(/\/+$/, '');
+            summary.overlayUrl = `${base}/overlay/${session.id}`;
+        }
+        return summary;
+    }
 }
 
 export interface SessionSummary {
     id: number;
     name: string;
+    endedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
+    /**
+     * Absolute URL to paste into OBS as a Browser Source (ADR 0005). Omitted
+     * when `PUBLIC_OVERLAY_BASE_URL` is unset — clients can fall back to
+     * computing one from `window.location.origin`.
+     */
+    overlayUrl?: string;
 }
 
 export interface SessionDetail extends SessionSummary {
     fixtureIds: number[];
+}
+
+export interface ListSessionsRequest {
+    status?: string;
 }
 
 export interface GetSessionRequest {
@@ -174,6 +234,10 @@ export interface UpdateSessionRequest {
 }
 
 export interface DeleteSessionRequest {
+    id: number;
+}
+
+export interface EndSessionRequest {
     id: number;
 }
 
@@ -222,6 +286,13 @@ export class UpdateSessionValidator extends ObjectValidator<UpdateSessionRequest
 }
 
 export class DeleteSessionValidator extends ObjectValidator<DeleteSessionRequest> {
+    constructor() {
+        super();
+        this.add("id", new NumberValidator());
+    }
+}
+
+export class EndSessionValidator extends ObjectValidator<EndSessionRequest> {
     constructor() {
         super();
         this.add("id", new NumberValidator());
