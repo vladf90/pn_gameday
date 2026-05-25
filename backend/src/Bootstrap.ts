@@ -17,6 +17,7 @@ import {
     EndSessionValidator,
     GetLiveSessionValidator,
     GetSessionValidator,
+    PublicOverlayValidator,
     SessionController,
     UpdateSessionValidator,
 } from "./controller/SessionController";
@@ -30,6 +31,7 @@ import {
     FixturesClient,
     LiveSnapshotStore,
     RateLimitTracker,
+    SessionAutoCloser,
     SessionFixtureProvider,
     SportmonksHttpClient,
 } from "./sportmonks";
@@ -47,10 +49,12 @@ export class Bootstrap {
     // because `SessionFixtureRepository` resolves the TypeORM connection eagerly.
     private sessionFixtureProvider?: SessionFixtureProvider;
     private fixturePoller?: FixturePoller;
+    private sessionAutoCloser?: SessionAutoCloser;
     // Cached poller options, parsed from env in `configureSportmonks()` so the
     // failure mode for malformed env values lands at boot, not at first tick.
     private pollIntervalMs: number = 5000;
     private multiFixtureBatchSize: number = 50;
+    private sessionAutoCloseIntervalMs: number = 30000;
 
     async setup() {
         this.app.use(cors({
@@ -150,6 +154,13 @@ export class Bootstrap {
         authRouter.delete("/sessions/:id/fixtures/:fixtureId", sessionController.detachFixture, new DetachFixtureValidator(),
             { resource: 'session', action: 'update' });
 
+        // Public OBS overlay read (ADR 0005 §4). Mounted on `NoAuthRouter`
+        // because OBS Browser Source sends no Authorization header — the URL
+        // is the capability. The handler reuses the in-memory live snapshot,
+        // so an enumerated id only ever exposes SportMonks score data the
+        // operator already chose to attach to a session.
+        router.get("/public/sessions/:id/overlay", sessionController.publicOverlay, new PublicOverlayValidator());
+
         // Bring up the SportMonks fixture poller once all its dependencies exist.
         // When `SPORTMONKS_ENABLED=false` the client/store remain undefined and we
         // skip wiring entirely — the integration is a no-op in that mode.
@@ -166,6 +177,17 @@ export class Bootstrap {
                 },
             );
             this.fixturePoller.start();
+
+            // Auto-close sessions once every attached fixture is in a terminal
+            // SportMonks state (ADR 0005 §2). Decoupled from the poll cadence —
+            // "session has ended" doesn't need sub-poll latency and a less
+            // frequent tick avoids hammering the DB.
+            this.sessionAutoCloser = new SessionAutoCloser(
+                sessionRepository,
+                this.liveSnapshotStore,
+                { intervalMs: this.sessionAutoCloseIntervalMs },
+            );
+            this.sessionAutoCloser.start();
         } else {
             this.logger.info(ctx, "Fixture poller not started — SportMonks integration disabled");
         }
@@ -197,6 +219,11 @@ export class Bootstrap {
         this.multiFixtureBatchSize = this.parsePositiveInt(
             process.env.SPORTMONKS_MULTI_FIXTURE_BATCH_SIZE, 50, "SPORTMONKS_MULTI_FIXTURE_BATCH_SIZE",
         );
+        // ADR 0005 — session auto-closer cadence. Parsed here so a malformed
+        // env value crashes at boot rather than on the first auto-close tick.
+        this.sessionAutoCloseIntervalMs = this.parsePositiveInt(
+            process.env.SESSION_AUTOCLOSE_INTERVAL_MS, 30000, "SESSION_AUTOCLOSE_INTERVAL_MS",
+        );
 
         this.rateLimitTracker = new RateLimitTracker();
         this.sportmonksClient = new SportmonksHttpClient(
@@ -212,6 +239,7 @@ export class Bootstrap {
             base_url: baseUrl,
             poll_interval_ms: this.pollIntervalMs,
             batch_size: this.multiFixtureBatchSize,
+            auto_close_interval_ms: this.sessionAutoCloseIntervalMs,
         });
     }
 
@@ -248,6 +276,13 @@ export class Bootstrap {
         // SIGINT here — local dev relies on the default Ctrl+C behaviour.
         process.on("SIGTERM", async () => {
             this.logger.info(ctx, "SIGTERM received — shutting down");
+            // Stop the auto-closer before the poller so a final auto-close
+            // doesn't race with an in-flight `findActiveWithFixtureIds()`.
+            try {
+                await this.sessionAutoCloser?.stop();
+            } catch (e) {
+                this.logger.exception(e instanceof Error ? e : new Error(String(e)));
+            }
             try {
                 await this.fixturePoller?.stop();
             } catch (e) {

@@ -115,6 +115,39 @@ export class SessionController {
         return this.toSessionSummary(result.session);
     };
 
+    /**
+     * Unauthenticated read for the OBS Browser Source overlay (ADR 0005 §4).
+     * Mounted on `NoAuthRouter` because OBS sends no Authorization header —
+     * the URL is the capability. Returns the same live-snapshot subset as
+     * `getLive`, plus the session's name and `endedAt` so the overlay can
+     * render a "session ended" state without needing a second round-trip.
+     *
+     * Looked up via `findByIdPublic` — no user filter.
+     */
+    publicOverlay = async (
+        _ctx: Context,
+        _auth: void,
+        request: PublicOverlayRequest,
+    ): Promise<PublicOverlayResponse> => {
+        const session = await this.sessionRepository.findByIdPublic(request.id);
+        if (!session) {
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+        const fixtureIds = await this.sessionFixtureRepository.findSportmonksFixtureIdsBySessionId(session.id);
+        const fixtures: LiveFixture[] = this.liveSnapshotStore
+            ? this.liveSnapshotStore.getMany(fixtureIds)
+            : [];
+        const presentIds = new Set(fixtures.map(f => f.id));
+        const missingFixtureIds = fixtureIds.filter(id => !presentIds.has(id));
+        return {
+            sessionId: session.id,
+            name: session.name,
+            endedAt: session.endedAt,
+            fixtures,
+            missingFixtureIds,
+        };
+    };
+
     attachFixture = async (
         _ctx: Context,
         auth: UserAuth,
@@ -241,6 +274,18 @@ export interface EndSessionRequest {
     id: number;
 }
 
+export interface PublicOverlayRequest {
+    id: number;
+}
+
+export interface PublicOverlayResponse {
+    sessionId: number;
+    name: string;
+    endedAt: Date | null;
+    fixtures: LiveFixture[];
+    missingFixtureIds: number[];
+}
+
 export interface AttachFixtureRequest {
     id: number;
     sportmonksFixtureId: number;
@@ -293,6 +338,13 @@ export class DeleteSessionValidator extends ObjectValidator<DeleteSessionRequest
 }
 
 export class EndSessionValidator extends ObjectValidator<EndSessionRequest> {
+    constructor() {
+        super();
+        this.add("id", new NumberValidator());
+    }
+}
+
+export class PublicOverlayValidator extends ObjectValidator<PublicOverlayRequest> {
     constructor() {
         super();
         this.add("id", new NumberValidator());
