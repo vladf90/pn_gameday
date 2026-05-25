@@ -1,6 +1,8 @@
 import React from "react";
 import { Refine, Authenticated } from "@refinedev/core";
+import { ThemedLayoutV2 } from "@refinedev/antd";
 import { ConfigProvider } from "antd";
+import { CalendarOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import routerBindings, {
     DocumentTitleHandler,
     UnsavedChangesNotifier,
@@ -29,7 +31,25 @@ const App: React.FC = () => {
                     authProvider={authProvider}
                     accessControlProvider={accessControlProvider}
                     routerProvider={routerBindings}
-                    resources={[]}
+                    resources={[
+                        {
+                            name: "fixtures",
+                            list: "/",
+                            meta: {
+                                label: "Fixtures",
+                                icon: <CalendarOutlined />,
+                            },
+                        },
+                        {
+                            name: "sessions",
+                            list: "/sessions",
+                            show: "/sessions/:id",
+                            meta: {
+                                label: "Sessions",
+                                icon: <PlayCircleOutlined />,
+                            },
+                        },
+                    ]}
                     options={{
                         syncWithLocation: true,
                         warnWhenUnsavedChanges: true,
@@ -51,7 +71,9 @@ const App: React.FC = () => {
                                     key="authenticated-layout"
                                     fallback={<Navigate to="/login" replace />}
                                 >
-                                    <Outlet />
+                                    <ThemedLayoutV2>
+                                        <Outlet />
+                                    </ThemedLayoutV2>
                                 </Authenticated>
                             }
                         >
