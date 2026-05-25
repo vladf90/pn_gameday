@@ -2,12 +2,14 @@ import React, {useCallback, useEffect, useMemo, useState} from "react";
 import {Alert, Avatar, Button, DatePicker, Empty, Space, Spin, Table, Tag, Typography} from "antd";
 import type {ColumnsType} from "antd/es/table";
 import dayjs, {Dayjs} from "dayjs";
+import {useNavigate} from "react-router-dom";
 import {FixtureRequestClient} from "../../clients/FixtureRequestClient";
 import {FixtureModel, FixtureParticipant} from "../../common/fixtures";
 
 const client = new FixtureRequestClient();
 
 export const FixturesByDate: React.FC = () => {
+    const navigate = useNavigate();
     const [date, setDate] = useState<Dayjs>(dayjs());
     const [fixtures, setFixtures] = useState<FixtureModel[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -37,14 +39,17 @@ export const FixturesByDate: React.FC = () => {
     return (
         <div style={{padding: 24, maxWidth: 1100, margin: "0 auto"}}>
             <Space direction="vertical" size="large" style={{width: "100%"}}>
-                <Space align="baseline" wrap>
-                    <Typography.Title level={2} style={{margin: 0}}>Fixtures</Typography.Title>
-                    <DatePicker
-                        value={date}
-                        onChange={(d) => d && setDate(d)}
-                        allowClear={false}
-                        format="YYYY-MM-DD"
-                    />
+                <Space align="baseline" wrap style={{justifyContent: "space-between", width: "100%"}}>
+                    <Space align="baseline" wrap>
+                        <Typography.Title level={2} style={{margin: 0}}>Fixtures</Typography.Title>
+                        <DatePicker
+                            value={date}
+                            onChange={(d) => d && setDate(d)}
+                            allowClear={false}
+                            format="YYYY-MM-DD"
+                        />
+                    </Space>
+                    <Button type="link" onClick={() => navigate('/sessions')}>Sessions →</Button>
                 </Space>
 
                 {error && (
