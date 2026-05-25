@@ -18,6 +18,8 @@ export {LiveSnapshotStore} from "./LiveSnapshotStore";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 export {SessionFixtureProvider} from "./SessionFixtureProvider";
 export {FixturePoller, FixturePollerOptions} from "./FixturePoller";
+export {SessionAutoCloser, SessionAutoCloserOptions} from "./SessionAutoCloser";
+export {isFixtureFinished, TERMINAL_FIXTURE_STATE_SHORT_NAMES} from "./isFixtureFinished";
 export {
     Fixture,
     FixtureByDate,

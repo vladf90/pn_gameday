@@ -37,6 +37,62 @@ export class SessionRepository {
         return this.repository.findOne({ where: { id, userId } });
     }
 
+    /**
+     * Public read for the OBS overlay endpoint (ADR 0005 §4). Looks up a
+     * session by id with **no user filter** — the URL itself is the capability.
+     */
+    async findByIdPublic(id: number): Promise<Session | null> {
+        return this.repository.findOne({ where: { id } });
+    }
+
+    /**
+     * Returns every active session with its attached fixture IDs, grouped.
+     * Used by `SessionAutoCloser` (ADR 0005 §2) to evaluate the
+     * "all-fixtures-finished" predicate. Includes sessions with zero
+     * attached fixtures so the caller can skip them explicitly (an empty
+     * fixture set must NEVER auto-end — the closer enforces that).
+     *
+     * Two queries on purpose: the first uses the partial index
+     * `IDX_session_user_active`; the second is a single `IN` lookup on the
+     * `session_fixture` PK's leading column. No `ARRAY_AGG` so the code
+     * stays DB-portable beyond Postgres.
+     */
+    async findActiveWithFixtureIds(): Promise<ActiveSessionWithFixtures[]> {
+        const sessions = await this.repository.find({
+            where: { endedAt: IsNull() },
+            select: { id: true, userId: true },
+            order: { id: "ASC" },
+        });
+        if (sessions.length === 0) {
+            return [];
+        }
+
+        const sessionIds = sessions.map(s => s.id);
+        const rows = await this.repository.manager
+            .createQueryBuilder()
+            .select("sf.session_id", "session_id")
+            .addSelect("sf.sportmonks_fixture_id", "sportmonks_fixture_id")
+            .from("session_fixture", "sf")
+            .where("sf.session_id IN (:...sessionIds)", { sessionIds })
+            .orderBy("sf.session_id", "ASC")
+            .addOrderBy("sf.sportmonks_fixture_id", "ASC")
+            .getRawMany<{ session_id: number | string; sportmonks_fixture_id: number | string }>();
+
+        const fixturesBySession = new Map<number, number[]>();
+        for (const row of rows) {
+            const sessionId = Number(row.session_id);
+            const list = fixturesBySession.get(sessionId) ?? [];
+            list.push(Number(row.sportmonks_fixture_id));
+            fixturesBySession.set(sessionId, list);
+        }
+
+        return sessions.map(s => ({
+            sessionId: s.id,
+            userId: s.userId,
+            fixtureIds: fixturesBySession.get(s.id) ?? [],
+        }));
+    }
+
     async create(userId: number, name: string): Promise<Session> {
         const session = new Session();
         session.userId = userId;
@@ -101,3 +157,9 @@ export type MarkEndedResult =
     | { status: 'ended'; session: Session }
     | { status: 'already_ended'; session: Session }
     | { status: 'not_found' };
+
+export interface ActiveSessionWithFixtures {
+    sessionId: number;
+    userId: number;
+    fixtureIds: number[];
+}
