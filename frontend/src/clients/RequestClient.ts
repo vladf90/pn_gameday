@@ -13,6 +13,18 @@ export class RequestClient {
         return response.data.data;
     }
 
+    async patch<RequestType, ResponseType, ParamsType>(path: string, request: RequestType, params?: ParamsType): Promise<ResponseType> {
+        const config = this.prepareConfig("patch", path, params, request)
+        const response = await axios.request(config);
+        return response.data.data;
+    }
+
+    async delete<ResponseType, ParamsType>(path: string, params?: ParamsType): Promise<ResponseType> {
+        const config = this.prepareConfig("delete", path, params)
+        const response = await axios.request(config);
+        return response.data.data;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     async postFormData<RequestType extends GenericFormData, ResponseType, ParamsType>(path: string, request: RequestType, _params?: ParamsType): Promise<ResponseType> {
         const form = new FormData();
