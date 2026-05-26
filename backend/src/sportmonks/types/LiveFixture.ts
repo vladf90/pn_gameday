@@ -18,4 +18,7 @@ export interface LiveFixture extends Fixture {
     participants?: unknown;
     /** `include=statistics` block, passed through verbatim. */
     statistics?: unknown;
+    /** `include=periods` block (ADR 0006). The ticking period carries the
+     *  live match minute consumed by the frontend overlay timer. */
+    periods?: unknown;
 }
