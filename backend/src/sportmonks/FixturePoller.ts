@@ -138,7 +138,9 @@ export class FixturePoller {
             const collected: LiveFixture[] = [];
             for (const batch of batches) {
                 const fixtures = await this.client.getMulti<LiveFixture>(batch, {
-                    includes: ["scores", "state", "events", "participants", "statistics"],
+                    // `periods` (ADR 0006): the ticking period carries the
+                    // authoritative live match minute the overlay timer needs.
+                    includes: ["scores", "state", "events", "participants", "statistics", "periods"],
                     ctx,
                 });
                 if (Array.isArray(fixtures)) {

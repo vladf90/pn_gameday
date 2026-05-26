@@ -1,10 +1,18 @@
-import React, {useCallback, useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {useParams} from "react-router-dom";
-import {OverlayRequestClient, PublicOverlayResponse} from "../../clients/OverlayRequestClient";
+import {
+    OverlayRequestClient,
+    PublicOverlayStreamMessage,
+} from "../../clients/OverlayRequestClient";
 import {FixtureModel, FixtureParticipant} from "../../common/fixtures";
+import {
+    TimerMode,
+    computeTimerMode,
+    reconcileTimerMode,
+} from "../../common/matchTimer";
+import {MatchTimer} from "./MatchTimer";
 
 const client = new OverlayRequestClient();
-const POLL_INTERVAL_MS = 5000;
 
 interface RouteParams {
     [key: string]: string | undefined;
@@ -19,23 +27,35 @@ interface RouteParams {
  *      composites the overlay over the broadcast feed. The Antd ConfigProvider
  *      / Refine layout from `App.tsx` are bypassed by the route placement
  *      (outside `<Authenticated>` and outside the Refine resource shell).
- *   2. **Polling, not WebSocket** — keeps the contract simple. The backend's
- *      `LiveSnapshotStore` is already updated every 5s by `FixturePoller`, so
- *      a 5s client poll keeps render latency at most ~10s.
- *   3. **Stop polling when ended** — once `endedAt` is set we render a
- *      "Session ended" state and clear the timer; OBS keeps the static
- *      message visible until the host removes the Browser Source.
+ *   2. **SSE, not polling** (ADR 0006). The backend pushes a fresh frame on
+ *      every FixturePoller tick (~5s) plus an immediate frame on connect, so
+ *      first paint is fast and score changes show up within ~1s of the
+ *      backend snapshot updating.
+ *   3. **No "session ended" message.** Per ADR 0006 §4, when the server
+ *      closes the stream after a session ends, we leave whatever final
+ *      frame was last delivered on screen. The host's broadcast keeps the
+ *      static final-score frame visible until they remove the Browser Source.
  */
 export const OverlayPage: React.FC = () => {
     const {sessionId: sessionIdParam} = useParams<RouteParams>();
     const sessionId = Number(sessionIdParam);
     const valid = Number.isFinite(sessionId) && sessionId > 0;
 
-    const [data, setData] = useState<PublicOverlayResponse | null>(null);
+    const [data, setData] = useState<PublicOverlayStreamMessage | null>(null);
     const [error, setError] = useState<string | null>(null);
-    /** Hold the timer id on a ref so the cleanup in `useEffect` clears the
-     *  active timer rather than a stale closure. */
-    const timerRef = useRef<number | null>(null);
+    /**
+     * Per-fixture-id timer mode. We hold this in state (and reconcile it via
+     * `reconcileTimerMode` on each frame) so smooth ticking survives across
+     * server pushes — see ADR 0006 §3. A fresh `Map` reference is committed
+     * on each update so React detects the change.
+     */
+    const [timerModes, setTimerModes] = useState<Map<number, TimerMode>>(() => new Map());
+    /**
+     * Local 1Hz ticker so `MM:SS` advances visibly between SSE frames. One
+     * shared interval drives every `MatchTimer` to avoid N independent
+     * timers for N fixtures.
+     */
+    const [now, setNow] = useState<number>(() => Date.now());
 
     // OBS browser sources expect transparent compositing. Inject the styles
     // here so the rest of the app (which has a white Antd background) isn't
@@ -52,42 +72,53 @@ export const OverlayPage: React.FC = () => {
         };
     }, []);
 
-    const fetchOnce = useCallback(async () => {
+    // 1Hz clock for the timer chips. `setNow(Date.now())` is the only thing
+    // that advances the displayed seconds between SSE frames; the helper
+    // `formatRunningClock` reads `now` and computes elapsed against the
+    // reference captured on the last frame.
+    useEffect(() => {
+        const id = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    // Hold the EventSource on a ref so the cleanup closes the active source
+    // (not a stale closure from an earlier render).
+    const sourceRef = useRef<EventSource | null>(null);
+
+    useEffect(() => {
         if (!valid) {
             setError("Invalid session id");
             return;
         }
-        try {
-            const response = await client.fetch(sessionId);
-            setData(response);
-            setError(null);
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : "Failed to load overlay";
-            setError(msg);
-        }
-    }, [valid, sessionId]);
-
-    useEffect(() => {
-        fetchOnce();
-    }, [fetchOnce]);
-
-    useEffect(() => {
-        if (!valid) {
-            return;
-        }
-        // Don't poll once the session has ended — the response is stable.
-        if (data?.endedAt) {
-            return;
-        }
-        const id = window.setInterval(fetchOnce, POLL_INTERVAL_MS);
-        timerRef.current = id;
+        const source = client.subscribeStream(sessionId, {
+            onMessage: (payload) => {
+                setData(payload);
+                setError(null);
+                // Reconcile timer modes against the previous map so smooth
+                // ticking is preserved across frames (see ADR 0006 §3).
+                setTimerModes((prev) => {
+                    const next = new Map<number, TimerMode>();
+                    const nowMs = Date.now();
+                    for (const fixture of payload.fixtures) {
+                        const fresh = computeTimerMode(fixture, payload.serverTime);
+                        const prior = prev.get(fixture.id) ?? null;
+                        next.set(fixture.id, reconcileTimerMode(prior, fresh, nowMs));
+                    }
+                    return next;
+                });
+            },
+            onClose: () => {
+                // ADR 0006 §4: server hung up after a final frame. We
+                // intentionally do NOT clear `data` — the last snapshot
+                // stays on screen for the host's broadcast.
+            },
+        });
+        sourceRef.current = source;
         return () => {
-            if (timerRef.current !== null) {
-                window.clearInterval(timerRef.current);
-                timerRef.current = null;
-            }
+            source.close();
+            sourceRef.current = null;
         };
-    }, [valid, data?.endedAt, fetchOnce]);
+    }, [valid, sessionId]);
 
     if (!valid) {
         return <OverlayMessage tone="error">Invalid session id</OverlayMessage>;
@@ -101,28 +132,37 @@ export const OverlayPage: React.FC = () => {
         return <OverlayMessage tone="info">Loading…</OverlayMessage>;
     }
 
-    if (data.endedAt) {
-        return <OverlayMessage tone="ended">{data.name} — Session ended</OverlayMessage>;
-    }
-
     if (data.fixtures.length === 0) {
+        // No fixtures attached yet — but we keep this rendering even after
+        // the stream closes, since ADR §4 says the last frame stays on
+        // screen. A truly-empty session just shows the waiting message.
         return <OverlayMessage tone="info">{data.name} — waiting for fixtures…</OverlayMessage>;
     }
 
     return (
         <div style={overlayContainerStyle}>
             {data.fixtures.map(fixture => (
-                <FixtureRow key={fixture.id} fixture={fixture} />
+                <FixtureRow
+                    key={fixture.id}
+                    fixture={fixture}
+                    timerMode={timerModes.get(fixture.id)}
+                    now={now}
+                />
             ))}
         </div>
     );
 };
 
-const FixtureRow: React.FC<{fixture: FixtureModel}> = ({fixture}) => {
+interface FixtureRowProps {
+    fixture: FixtureModel;
+    timerMode: TimerMode | undefined;
+    now: number;
+}
+
+const FixtureRow: React.FC<FixtureRowProps> = ({fixture, timerMode, now}) => {
     const home = fixture.participants?.find(p => p.meta?.location === "home");
     const away = fixture.participants?.find(p => p.meta?.location === "away");
     const score = currentScore(fixture);
-    const stateLabel = fixture.state?.short_name ?? fixture.state?.state ?? "";
 
     return (
         <div style={rowStyle}>
@@ -131,7 +171,7 @@ const FixtureRow: React.FC<{fixture: FixtureModel}> = ({fixture}) => {
                 {score ? `${score.home} – ${score.away}` : "—"}
             </div>
             <ParticipantCell participant={away} align="left" />
-            {stateLabel && <div style={stateStyle}>{stateLabel}</div>}
+            {timerMode && <MatchTimer style={stateStyle} mode={timerMode} now={now} />}
         </div>
     );
 };
@@ -220,11 +260,12 @@ const scoreStyle: React.CSSProperties = {
 };
 
 const stateStyle: React.CSSProperties = {
-    minWidth: 56,
+    minWidth: 72,
     textAlign: "right",
     fontSize: 14,
     fontWeight: 500,
     opacity: 0.8,
+    fontVariantNumeric: "tabular-nums",
 };
 
 const messageStyle: React.CSSProperties = {
