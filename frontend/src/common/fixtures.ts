@@ -40,6 +40,21 @@ export interface FixtureState {
     short_name?: string;
 }
 
+/**
+ * One entry of the SportMonks `periods` include. The current/ticking period
+ * is the one with `ticking: true`; that's where the live match minute comes
+ * from (ADR 0006). `minutes` is the authoritative server-reported minute;
+ * `seconds` may or may not be populated depending on the upstream feed.
+ */
+export interface FixturePeriod {
+    id?: number;
+    type_id?: number;
+    minutes?: number;
+    seconds?: number;
+    ticking?: boolean;
+    description?: string;
+}
+
 export interface FixtureModel {
     id: number;
     name?: string;
@@ -50,4 +65,5 @@ export interface FixtureModel {
     league?: FixtureLeague;
     scores?: FixtureScoreEntry[];
     state?: FixtureState;
+    periods?: FixturePeriod[];
 }
