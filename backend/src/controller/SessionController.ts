@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { Logger } from "../Logger";
-import { Context } from "../Logger/Context";
 import { SessionRepository, SessionStatusFilter } from "../database/repositories/SessionRepository";
 import { SessionFixtureRepository } from "../database/repositories/SessionFixtureRepository";
 import { UserAuth } from "../router/UserAuthRouter";
@@ -43,13 +42,13 @@ export class SessionController {
         private readonly overlayEventBus: OverlayEventBus,
     ) {}
 
-    getAll = async (_ctx: Context, auth: UserAuth, request: ListSessionsRequest): Promise<SessionSummary[]> => {
+    getAll = async (auth: UserAuth, request: ListSessionsRequest): Promise<SessionSummary[]> => {
         const status = this.parseStatus(request.status);
         const sessions = await this.sessionRepository.findByUserAndStatus(auth.id, status);
         return sessions.map(s => this.toSessionSummary(s));
     };
 
-    get = async (_ctx: Context, auth: UserAuth, request: GetSessionRequest): Promise<SessionDetail> => {
+    get = async (auth: UserAuth, request: GetSessionRequest): Promise<SessionDetail> => {
         const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
         if (!session) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -70,7 +69,7 @@ export class SessionController {
      * poller has not yet fetched are surfaced in `missingFixtureIds` rather
      * than triggering a synchronous fetch.
      */
-    getLive = async (_ctx: Context, auth: UserAuth, request: GetLiveSessionRequest): Promise<GetLiveSessionResponse> => {
+    getLive = async (auth: UserAuth, request: GetLiveSessionRequest): Promise<GetLiveSessionResponse> => {
         const session = await this.sessionRepository.findByIdForUser(request.id, auth.id);
         if (!session) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -90,12 +89,12 @@ export class SessionController {
         };
     };
 
-    create = async (_ctx: Context, auth: UserAuth, request: CreateSessionRequest): Promise<SessionSummary> => {
+    create = async (auth: UserAuth, request: CreateSessionRequest): Promise<SessionSummary> => {
         const session = await this.sessionRepository.create(auth.id, request.name);
         return this.toSessionSummary(session);
     };
 
-    update = async (_ctx: Context, auth: UserAuth, request: UpdateSessionRequest): Promise<SessionSummary> => {
+    update = async (auth: UserAuth, request: UpdateSessionRequest): Promise<SessionSummary> => {
         const updated = await this.sessionRepository.update(request.id, auth.id, { name: request.name });
         if (!updated) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -103,7 +102,7 @@ export class SessionController {
         return this.toSessionSummary(updated);
     };
 
-    delete = async (_ctx: Context, auth: UserAuth, request: DeleteSessionRequest): Promise<{ id: number }> => {
+    delete = async (auth: UserAuth, request: DeleteSessionRequest): Promise<{ id: number }> => {
         const ok = await this.sessionRepository.delete(request.id, auth.id);
         if (!ok) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -117,7 +116,7 @@ export class SessionController {
      * immediately (e.g. cancelled stream). Idempotent at the SQL layer — a
      * second call observes `ended_at` already set and returns 409.
      */
-    end = async (_ctx: Context, auth: UserAuth, request: EndSessionRequest): Promise<SessionSummary> => {
+    end = async (auth: UserAuth, request: EndSessionRequest): Promise<SessionSummary> => {
         const result = await this.sessionRepository.markEnded(request.id, auth.id);
         if (result.status === 'not_found') {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -138,7 +137,6 @@ export class SessionController {
      * Looked up via `findByIdPublic` — no user filter.
      */
     publicOverlay = async (
-        _ctx: Context,
         _auth: void,
         request: PublicOverlayRequest,
     ): Promise<PublicOverlayResponse> => {
@@ -171,7 +169,6 @@ export class SessionController {
      *      tear-down) unsubscribe and clear the heartbeat.
      */
     streamPublicOverlay = async (
-        _ctx: Context,
         _auth: void,
         req: Request,
         res: Response,
@@ -324,7 +321,6 @@ export class SessionController {
     };
 
     attachFixture = async (
-        _ctx: Context,
         auth: UserAuth,
         request: AttachFixtureRequest,
     ): Promise<AttachFixtureResponse> => {
@@ -346,7 +342,6 @@ export class SessionController {
     };
 
     detachFixture = async (
-        _ctx: Context,
         auth: UserAuth,
         request: DetachFixtureRequest,
     ): Promise<{ sessionId: number; sportmonksFixtureId: number }> => {

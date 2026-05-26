@@ -4,11 +4,9 @@ import * as dotenv from "dotenv";
 dotenv.config({ path: '../.env' });
 
 import {Bootstrap} from "./Bootstrap"
-import {ContextFactory} from "./Logger/Context";
 
 const bootstrap = new Bootstrap();
-const ctx = ContextFactory.createProcessContext("live");
 
-bootstrap.boot(ctx, {
+bootstrap.boot({
     port: parseInt(process.env.PORT || "20000")
 });

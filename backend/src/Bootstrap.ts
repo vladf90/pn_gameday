@@ -6,7 +6,6 @@ import {Application} from "express";
 import {Logger} from "./Logger";
 import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
-import {Context, ContextFactory} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
 import {MetricsController} from "./controller/MetricsController";
 import {
@@ -180,7 +179,6 @@ export class Bootstrap {
         // Bring up the SportMonks fixture poller once all its dependencies exist.
         // When `SPORTMONKS_ENABLED=false` the client/store remain undefined and we
         // skip wiring entirely — the integration is a no-op in that mode.
-        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
         if (this.sportmonksClient && this.sessionFixtureProvider && this.liveSnapshotStore) {
             const fixturesClient = new FixturesClient(this.sportmonksClient);
             this.fixturePoller = new FixturePoller(
@@ -211,7 +209,7 @@ export class Bootstrap {
             );
             this.sessionAutoCloser.start();
         } else {
-            this.logger.info(ctx, "Fixture poller not started — SportMonks integration disabled");
+            this.logger.info("Fixture poller not started — SportMonks integration disabled");
         }
     }
 
@@ -219,9 +217,8 @@ export class Bootstrap {
         // Default: enabled. Only the literal string "false" disables it, so a
         // typo can't accidentally turn the integration off in production.
         const enabled = process.env.SPORTMONKS_ENABLED !== "false";
-        const ctx = ContextFactory.createProcessContext("sportmonks");
         if (!enabled) {
-            this.logger.info(ctx, "SportMonks integration disabled via SPORTMONKS_ENABLED=false");
+            this.logger.info("SportMonks integration disabled via SPORTMONKS_ENABLED=false");
             return;
         }
 
@@ -257,7 +254,7 @@ export class Bootstrap {
         // the same instance. The store self-updates the
         // `sportmonks_live_fixtures_in_memory` gauge from `./sportmonks/metrics.ts`.
         this.liveSnapshotStore = new LiveSnapshotStore();
-        this.logger.info(ctx, "SportMonks client configured", {
+        this.logger.info("SportMonks client configured", {
             base_url: baseUrl,
             poll_interval_ms: this.pollIntervalMs,
             batch_size: this.multiFixtureBatchSize,
@@ -281,7 +278,7 @@ export class Bootstrap {
         return parsed;
     }
 
-    async boot(ctx: Context, config: Config) {
+    async boot(config: Config) {
         process.on("uncaughtException", (exception: Error) => {
             this.logger.exception(exception);
             process.exit(1);
@@ -297,7 +294,7 @@ export class Bootstrap {
         // SIGTERM drains the in-flight request"). We deliberately do not touch
         // SIGINT here — local dev relies on the default Ctrl+C behaviour.
         process.on("SIGTERM", async () => {
-            this.logger.info(ctx, "SIGTERM received — shutting down");
+            this.logger.info("SIGTERM received — shutting down");
             // Stop the auto-closer before the poller so a final auto-close
             // doesn't race with an in-flight `findActiveWithFixtureIds()`.
             try {
@@ -316,7 +313,7 @@ export class Bootstrap {
         await this.setup();
 
         this.app.listen(config.port, () => {
-            this.logger.info(ctx, "Web server listening on port: " + config.port);
+            this.logger.info("Web server listening on port: " + config.port);
         });
     }
 }

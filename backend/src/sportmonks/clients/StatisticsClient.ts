@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Statistic, StatisticInclude, StatisticParticipantType} from "../types/Statistic";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface StatisticsQueryOptions {
     includes?: StatisticInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -29,7 +27,7 @@ export class StatisticsClient {
         return this.http.get<T[]>(
             `/statistics/seasons/${participantType}/${participantId}`,
             this.buildQuery(opts.includes),
-            {entity: this.entity, ctx: opts.ctx},
+            {entity: this.entity},
         );
     }
 
@@ -40,7 +38,6 @@ export class StatisticsClient {
     ): Promise<T> {
         return this.http.get<T>(`/statistics/stages/${stageId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -51,7 +48,6 @@ export class StatisticsClient {
     ): Promise<T> {
         return this.http.get<T>(`/statistics/rounds/${roundId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

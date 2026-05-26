@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Player, PlayerInclude} from "../types/Player";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface PlayersQueryOptions {
     includes?: PlayerInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -21,7 +19,6 @@ export class PlayersClient {
     getAll<T extends Player = Player>(opts: PlayersQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/players", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -29,7 +26,6 @@ export class PlayersClient {
     getById<T extends Player = Player>(id: number, opts: PlayersQueryOptions = {}): Promise<T> {
         return this.http.get<T>(`/players/${id}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -37,7 +33,6 @@ export class PlayersClient {
     getByCountry<T extends Player = Player>(countryId: number, opts: PlayersQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/players/countries/${countryId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -45,7 +40,6 @@ export class PlayersClient {
     search<T extends Player = Player>(name: string, opts: PlayersQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/players/search/${encodeURIComponent(name)}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -53,7 +47,6 @@ export class PlayersClient {
     getLatest<T extends Player = Player>(opts: PlayersQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/players/latest", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
