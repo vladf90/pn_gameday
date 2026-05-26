@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from "react";
-import {useParams} from "react-router-dom";
+import {useParams, useSearchParams} from "react-router-dom";
 import {
     OverlayRequestClient,
     PublicOverlayStreamMessage,
@@ -39,7 +39,12 @@ interface RouteParams {
 export const OverlayPage: React.FC = () => {
     const {sessionId: sessionIdParam} = useParams<RouteParams>();
     const sessionId = Number(sessionIdParam);
-    const valid = Number.isFinite(sessionId) && sessionId > 0;
+    // Per-session capability token (ADR 0008). Without it the server 404s
+    // the SSE handshake; short-circuit here so we don't open a doomed
+    // EventSource (which would also surface as an opaque `onerror`).
+    const [searchParams] = useSearchParams();
+    const token = searchParams.get("token") ?? "";
+    const valid = Number.isFinite(sessionId) && sessionId > 0 && token.length > 0;
 
     const [data, setData] = useState<PublicOverlayStreamMessage | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -87,10 +92,10 @@ export const OverlayPage: React.FC = () => {
 
     useEffect(() => {
         if (!valid) {
-            setError("Invalid session id");
+            setError("Invalid overlay link");
             return;
         }
-        const source = client.subscribeStream(sessionId, {
+        const source = client.subscribeStream(sessionId, token, {
             onMessage: (payload) => {
                 setData(payload);
                 setError(null);
@@ -118,10 +123,10 @@ export const OverlayPage: React.FC = () => {
             source.close();
             sourceRef.current = null;
         };
-    }, [valid, sessionId]);
+    }, [valid, sessionId, token]);
 
     if (!valid) {
-        return <OverlayMessage tone="error">Invalid session id</OverlayMessage>;
+        return <OverlayMessage tone="error">Invalid overlay link</OverlayMessage>;
     }
 
     if (error && !data) {

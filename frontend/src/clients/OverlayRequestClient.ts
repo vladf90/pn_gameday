@@ -45,12 +45,15 @@ export class OverlayRequestClient {
      * One-shot HTTP fetch — used as a non-streaming fallback and by ad-hoc
      * tooling (e.g. `curl`). Production overlay rendering uses
      * `subscribeStream` instead (ADR 0006).
+     *
+     * `token` is the per-session capability token from ADR 0008.
      */
-    async fetch(sessionId: number): Promise<PublicOverlayResponse> {
+    async fetch(sessionId: number, token: string): Promise<PublicOverlayResponse> {
         const response = await axios.request({
             method: "get",
             baseURL: "/api",
             url: `/public/sessions/${sessionId}/overlay`,
+            params: { token },
         });
         return response.data.data;
     }
@@ -59,6 +62,9 @@ export class OverlayRequestClient {
      * Open a Server-Sent Events subscription for the given session id.
      * Returns the underlying `EventSource` so the caller can `.close()` it
      * on unmount.
+     *
+     * `token` is the per-session capability token from ADR 0008 — the
+     * server 404s the SSE handshake (pre-flush) if it's missing or wrong.
      *
      * Frame parsing tolerates malformed bodies (logs + skip) so a single
      * bad frame can't take the overlay offline — `EventSource` will keep
@@ -70,8 +76,8 @@ export class OverlayRequestClient {
      *   - other readyStates — transient network blip; `EventSource`
      *     auto-reconnects, so we deliberately stay silent here.
      */
-    subscribeStream(sessionId: number, handlers: OverlayStreamHandlers): EventSource {
-        const url = `/api/public/sessions/${sessionId}/overlay/stream`;
+    subscribeStream(sessionId: number, token: string, handlers: OverlayStreamHandlers): EventSource {
+        const url = `/api/public/sessions/${sessionId}/overlay/stream?token=${encodeURIComponent(token)}`;
         const source = new EventSource(url);
 
         source.onmessage = (event: MessageEvent) => {
