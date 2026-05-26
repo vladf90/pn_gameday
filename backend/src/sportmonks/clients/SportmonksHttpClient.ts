@@ -79,8 +79,11 @@ export class SportmonksHttpClient {
         const loggedEndpoint = this.stripQuery(path);
         const endpointMetricLabel = endpointLabel(loggedEndpoint);
         // HTTP detail fields rendered inline in the log line by the formatter
-        // (ADR 0007). `SportmonksHttpClient` only issues GETs today.
-        const httpFields = {direction: "outbound", method: "GET", url};
+        // (ADR 0007). `SportmonksHttpClient` only issues GETs today. The
+        // logged URL omits query params — they can be high-cardinality
+        // (includes, multi IDs) and add noise without aiding debugging,
+        // since `entity` + `endpoint` already pin down the call.
+        const httpFields = {direction: "outbound", method: "GET", url: `${this.baseUrl}${loggedEndpoint}`};
 
         const startedAt = Date.now();
         const response = await this.fetchImpl(url, {
