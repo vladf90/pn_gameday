@@ -43,7 +43,7 @@ class Logger {
 ### Log line shape
 
 ```
-[<logTag>] <timestamp> <level> [<direction>] [<statusCode>] [<method path-or-url>][: <message>]
+<timestamp> [<logTag>] <level> [<direction>] [<statusCode>] [<method path-or-url>][: <message>]
 ```
 
 Bracketed segments are optional — rendered only when the relevant fields
@@ -53,11 +53,11 @@ Examples:
 
 | Case | Line |
 |---|---|
-| Inbound success | `[Router] 2026-05-26 12:00:00 info inbound 200 POST /sessions/42` |
-| Inbound error | `[Router] 2026-05-26 12:00:00 error inbound 404 GET /sessions/999: Session not found` |
-| Outbound success | `[SportmonksHttpClient] 2026-05-26 12:00:00 info outbound 200 GET https://api.sportmonks.com/...` |
-| Outbound error | `[SportmonksHttpClient] 2026-05-26 12:00:00 error outbound 502 GET https://...: call failed` |
-| Job / lifecycle | `[FixturePoller] 2026-05-26 12:00:00 info: FixturePoller started` |
+| Inbound success | `2026-05-26 12:00:00 [Router] info inbound 200 POST /sessions/42` |
+| Inbound error | `2026-05-26 12:00:00 [Router] error inbound 404 GET /sessions/999: Session not found` |
+| Outbound success | `2026-05-26 12:00:00 [SportmonksHttpClient] info outbound 200 GET https://api.sportmonks.com/...` |
+| Outbound error | `2026-05-26 12:00:00 [SportmonksHttpClient] error outbound 502 GET https://...: call failed` |
+| Job / lifecycle | `2026-05-26 12:00:00 [FixturePoller] info: FixturePoller started` |
 
 Success log lines (inbound and outbound) end cleanly at method+path/url
 with an empty message. Errors carry a descriptive message after the

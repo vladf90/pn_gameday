@@ -39,7 +39,7 @@ export class Logger {
                             const httpDetails = formatHttpDetails(info);
                             const stack = info.stack != null ? `\n${info.stack}` : "";
                             const message = info.message !== "" ? `: ${info.message}` : "";
-                            return `${tag} ${info.timestamp} ${info.level}${direction}${status}${httpDetails}${message}${stack}`;
+                            return `${info.timestamp} ${tag} ${info.level}${direction}${status}${httpDetails}${message}${stack}`;
                         })
                     )
                 })
