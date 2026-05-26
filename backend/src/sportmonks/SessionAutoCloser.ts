@@ -1,5 +1,5 @@
 import {Logger} from "../Logger";
-import {ContextFactory} from "../Logger/Context";
+import {JobContext} from "../Logger/Context";
 import {SessionRepository} from "../database/repositories/SessionRepository";
 import {LiveSnapshotStore} from "./LiveSnapshotStore";
 import {isFixtureFinished} from "./isFixtureFinished";
@@ -48,7 +48,7 @@ export class SessionAutoCloser {
      * without scheduling a duplicate tick.
      */
     start(): void {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
+        const ctx = new JobContext();
         if (this.started) {
             this.logger.warning(ctx, "SessionAutoCloser.start() called twice — ignoring");
             return;
@@ -67,7 +67,7 @@ export class SessionAutoCloser {
      * caller can shut down deterministically.
      */
     async stop(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
+        const ctx = new JobContext();
         if (!this.started) {
             return;
         }
@@ -109,7 +109,7 @@ export class SessionAutoCloser {
      * `start()`ed to call this.
      */
     async runTick(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
+        const ctx = new JobContext();
         try {
             const sessions = await this.sessionRepository.findActiveWithFixtureIds();
             let endedCount = 0;

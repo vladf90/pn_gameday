@@ -1,5 +1,5 @@
 import {Logger} from "../../Logger";
-import {Context, ContextFactory} from "../../Logger/Context";
+import {OutboundRequestContext} from "../../Logger/Context";
 import {RateLimitTracker} from "../RateLimitTracker";
 import {
     endpointLabel,
@@ -22,8 +22,6 @@ export interface GetOptions {
      * messages. Entity clients pin this (e.g. `"Fixture"`, `"League"`).
      */
     entity: string;
-    /** Optional context for structured logging; falls back to a process context. */
-    ctx?: Context;
 }
 
 /**
@@ -77,11 +75,11 @@ export class SportmonksHttpClient {
         query: Record<string, string | number> | undefined,
         options: GetOptions,
     ): Promise<T> {
-        const ctx = options.ctx ?? ContextFactory.createProcessContext("sportmonks");
         const entity = options.entity;
         const url = this.buildUrl(path, query);
         const loggedEndpoint = this.stripQuery(path);
         const endpointMetricLabel = endpointLabel(loggedEndpoint);
+        const ctx = new OutboundRequestContext("GET", url);
 
         const startedAt = Date.now();
         const response = await this.fetchImpl(url, {

@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Livescore, LivescoreInclude} from "../types/Livescore";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface LivescoresQueryOptions {
     includes?: LivescoreInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -21,7 +19,6 @@ export class LivescoresClient {
     getAll<T extends Livescore = Livescore>(opts: LivescoresQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/livescores", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -29,7 +26,6 @@ export class LivescoresClient {
     getInplay<T extends Livescore = Livescore>(opts: LivescoresQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/livescores/inplay", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -37,7 +33,6 @@ export class LivescoresClient {
     getLatest<T extends Livescore = Livescore>(opts: LivescoresQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/livescores/latest", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

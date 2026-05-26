@@ -1,6 +1,6 @@
 import {IRouter} from "./IRouter";
 import {Application, Request, Response} from "express";
-import {Context, ContextFactory} from "../Logger/Context";
+import {Context, InboundRequestContext} from "../Logger/Context";
 import {ServiceError} from "../utils/ServiceError";
 import {Validator} from "../validator/Validator";
 import {Logger} from "../Logger";
@@ -65,7 +65,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         permission?: Permission,
     ): void {
         this.app.get(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "GET");
+            const ctx = new InboundRequestContext("GET", path);
             try {
                 const auth = await this.authenticate(req);
                 if (permission) {
@@ -111,7 +111,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         permission?: Permission,
     ): void {
         this.app[method](path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", method.toUpperCase());
+            const ctx = new InboundRequestContext(method.toUpperCase(), path);
             try {
                 const auth = await this.authenticate(req);
 

@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Fixture, FixtureInclude} from "../types/Fixture";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface FixturesQueryOptions {
     includes?: FixtureInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -26,7 +24,6 @@ export class FixturesClient {
     getAll<T extends Fixture = Fixture>(opts: FixturesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/fixtures", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -34,7 +31,6 @@ export class FixturesClient {
     getById<T extends Fixture = Fixture>(id: number, opts: FixturesQueryOptions = {}): Promise<T> {
         return this.http.get<T>(`/fixtures/${id}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -42,7 +38,6 @@ export class FixturesClient {
     getMulti<T extends Fixture = Fixture>(ids: number[], opts: FixturesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/multi/${ids.join(",")}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -50,7 +45,6 @@ export class FixturesClient {
     getByDate<T extends Fixture = Fixture>(date: string, opts: FixturesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/date/${date}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -62,7 +56,6 @@ export class FixturesClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/between/${start}/${end}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -76,7 +69,7 @@ export class FixturesClient {
         return this.http.get<T[]>(
             `/fixtures/between/${start}/${end}/${teamId}`,
             this.buildQuery(opts.includes),
-            {entity: this.entity, ctx: opts.ctx},
+            {entity: this.entity},
         );
     }
 
@@ -88,7 +81,6 @@ export class FixturesClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/head-to-head/${teamA}/${teamB}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -96,7 +88,6 @@ export class FixturesClient {
     search<T extends Fixture = Fixture>(name: string, opts: FixturesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/search/${encodeURIComponent(name)}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -107,7 +98,6 @@ export class FixturesClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/fixtures/upcoming/markets/${marketId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -115,7 +105,6 @@ export class FixturesClient {
     getLatest<T extends Fixture = Fixture>(opts: FixturesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/fixtures/latest", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

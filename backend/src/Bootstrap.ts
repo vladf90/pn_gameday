@@ -6,7 +6,7 @@ import {Application} from "express";
 import {Logger} from "./Logger";
 import {NoAuthRouter} from "./router/NoAuthRouter";
 import {UserAuthRouter} from "./router/UserAuthRouter";
-import {Context, ContextFactory} from "./Logger/Context";
+import {Context, JobContext} from "./Logger/Context";
 import {LoginValidator, UserController} from "./controller/UserController";
 import {MetricsController} from "./controller/MetricsController";
 import {
@@ -180,7 +180,7 @@ export class Bootstrap {
         // Bring up the SportMonks fixture poller once all its dependencies exist.
         // When `SPORTMONKS_ENABLED=false` the client/store remain undefined and we
         // skip wiring entirely — the integration is a no-op in that mode.
-        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
+        const ctx = new JobContext();
         if (this.sportmonksClient && this.sessionFixtureProvider && this.liveSnapshotStore) {
             const fixturesClient = new FixturesClient(this.sportmonksClient);
             this.fixturePoller = new FixturePoller(
@@ -219,7 +219,7 @@ export class Bootstrap {
         // Default: enabled. Only the literal string "false" disables it, so a
         // typo can't accidentally turn the integration off in production.
         const enabled = process.env.SPORTMONKS_ENABLED !== "false";
-        const ctx = ContextFactory.createProcessContext("sportmonks");
+        const ctx = new JobContext();
         if (!enabled) {
             this.logger.info(ctx, "SportMonks integration disabled via SPORTMONKS_ENABLED=false");
             return;

@@ -1,49 +1,43 @@
-export enum ContextType {
-    TYPE_PROCESS = "process",
-    TYPE_REQUEST = "request"
-}
+/**
+ * Logging context — stable identity of the unit of work that is emitting
+ * log lines. Three kinds (ADR 0007):
+ *
+ *   - `InboundRequestContext`  — built by the router for incoming HTTP.
+ *   - `OutboundRequestContext` — built by HTTP clients for calls we make.
+ *   - `JobContext`             — built by background workers / bootstrap.
+ *
+ * Per-event data (status codes, duration, error details) is NOT on the
+ * context; it goes in the `info` object of each `Logger` call.
+ */
 
-export interface RequestContext extends BaseContext {
-    path: string;
-    type: ContextType.TYPE_REQUEST;
-    method: string;
-    timestamp: Date;
-}
-
-export interface ProcessContext extends BaseContext {
-    type: ContextType.TYPE_PROCESS
-}
-
-export interface BaseContext {
-    service: string;
-}
-
-export type ContextUnion = ProcessContext | RequestContext;
-
-export class ContextFactory {
-    public static createProcessContext(service: string): Context {
-        return new Context({service, type: ContextType.TYPE_PROCESS});
-    }
-
-    public static createRequestContext(path, service, method): Context {
-        return new Context({path, service, type: ContextType.TYPE_REQUEST, method, timestamp: new Date()});
-    }
-}
-
-export class Context {
-    constructor(private readonly context: ContextUnion) {
-    }
+export class InboundRequestContext {
+    constructor(
+        public readonly method: string,
+        public readonly path: string,
+        public readonly timestamp: Date = new Date(),
+    ) {}
 
     format(): string {
-        switch (this.context.type) {
-            case ContextType.TYPE_PROCESS:
-                return "";
-            case ContextType.TYPE_REQUEST:
-                return `${this.context.method} ${this.context.path} `
-        }
-    }
-
-    getContext() {
-        return this.context;
+        return `${this.method} ${this.path} `;
     }
 }
+
+export class OutboundRequestContext {
+    constructor(
+        public readonly method: string,
+        public readonly url: string,
+        public readonly startedAt: Date = new Date(),
+    ) {}
+
+    format(): string {
+        return `${this.method} ${this.url} `;
+    }
+}
+
+export class JobContext {
+    format(): string {
+        return "";
+    }
+}
+
+export type Context = InboundRequestContext | OutboundRequestContext | JobContext;
