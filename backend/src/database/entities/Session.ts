@@ -21,6 +21,15 @@ export class Session {
     userId: number;
 
     /**
+     * Opaque capability for the public overlay URL (ADR 0008). 64 hex chars =
+     * 256 bits of entropy. Backed by `UQ_session_overlay_token`; rotated in
+     * place via `SessionRepository.rotateOverlayToken` when the host suspects
+     * the URL has leaked.
+     */
+    @Column({ name: "overlay_token", type: "varchar", length: 64 })
+    overlayToken: string;
+
+    /**
      * Lifecycle marker (ADR 0005). `null` = active; non-null = ended. A partial
      * index on `(user_id) WHERE ended_at IS NULL` makes "list my active
      * sessions" O(active) regardless of the ended-session tail.

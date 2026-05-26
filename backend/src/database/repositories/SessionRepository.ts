@@ -1,6 +1,17 @@
+import { randomBytes } from "crypto";
 import { FindOptionsWhere, IsNull, Not, Repository } from "typeorm";
 import { Session } from "../entities/Session";
 import { AppDataSource } from "../data-source";
+
+/**
+ * 32 bytes → 64 hex chars, ~256 bits of entropy. Used for the public overlay
+ * URL capability (ADR 0008). The collision bound is astronomical, and the
+ * `UQ_session_overlay_token` unique index would surface any collision as a
+ * constraint violation anyway.
+ */
+function generateOverlayToken(): string {
+    return randomBytes(32).toString("hex");
+}
 
 export type SessionStatusFilter = 'active' | 'ended' | 'all';
 
@@ -43,6 +54,17 @@ export class SessionRepository {
      */
     async findByIdPublic(id: number): Promise<Session | null> {
         return this.repository.findOne({ where: { id } });
+    }
+
+    /**
+     * Token-scoped public lookup for the overlay routes (ADR 0008). Returns
+     * `null` when the session id doesn't exist OR the token doesn't match —
+     * controllers translate both to 404 (don't leak session existence).
+     * Does NOT filter on `ended_at`: ended sessions still expose their final
+     * frame per ADR 0006 §4.
+     */
+    async findByIdAndToken(id: number, token: string): Promise<Session | null> {
+        return this.repository.findOne({ where: { id, overlayToken: token } });
     }
 
     /**
@@ -97,7 +119,23 @@ export class SessionRepository {
         const session = new Session();
         session.userId = userId;
         session.name = name;
+        session.overlayToken = generateOverlayToken();
         session.endedAt = null;
+        return this.repository.save(session);
+    }
+
+    /**
+     * Owner-scoped rotation of the overlay token (ADR 0008). Returns the
+     * refreshed session on success, `null` when the row doesn't exist or is
+     * owned by a different user. The token is overwritten in place — previous
+     * URLs stop working immediately. No history is retained (out of scope).
+     */
+    async rotateOverlayToken(id: number, userId: number): Promise<Session | null> {
+        const session = await this.findByIdForUser(id, userId);
+        if (!session) {
+            return null;
+        }
+        session.overlayToken = generateOverlayToken();
         return this.repository.save(session);
     }
 
