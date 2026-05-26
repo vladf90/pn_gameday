@@ -17,6 +17,7 @@ import {
     GetLiveSessionValidator,
     GetSessionValidator,
     PublicOverlayValidator,
+    RotateOverlayTokenValidator,
     SessionController,
     UpdateSessionValidator,
 } from "./controller/SessionController";
@@ -155,6 +156,8 @@ export class Bootstrap {
         authRouter.delete("/sessions/:id", sessionController.delete, new DeleteSessionValidator(),
             { resource: 'session', action: 'delete' });
         authRouter.post("/sessions/:id/end", sessionController.end, new EndSessionValidator(),
+            { resource: 'session', action: 'update' });
+        authRouter.post("/sessions/:id/overlay/token/rotate", sessionController.rotateOverlayToken, new RotateOverlayTokenValidator(),
             { resource: 'session', action: 'update' });
         authRouter.post("/sessions/:id/fixtures", sessionController.attachFixture, new AttachFixtureValidator(),
             { resource: 'session', action: 'update' });
