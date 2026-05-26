@@ -111,6 +111,21 @@ export class SessionController {
     };
 
     /**
+     * Rotate the overlay token (ADR 0008). Overwrites `session.overlay_token`
+     * in place; any URL holding the previous token immediately 404s. Owner-
+     * scoped — non-owner gets 404 (don't leak existence). Returns the updated
+     * `SessionSummary` so the frontend can swap the displayed overlay URL in
+     * place without a follow-up GET.
+     */
+    rotateOverlayToken = async (auth: UserAuth, request: RotateOverlayTokenRequest): Promise<SessionSummary> => {
+        const rotated = await this.sessionRepository.rotateOverlayToken(request.id, auth.id);
+        if (!rotated) {
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+        return this.toSessionSummary(rotated);
+    };
+
+    /**
      * Manual force-end. Per ADR 0005, the primary lifecycle mechanism is the
      * auto-closer (issue #60); this endpoint lets a host end a session
      * immediately (e.g. cancelled stream). Idempotent at the SQL layer — a
@@ -134,13 +149,15 @@ export class SessionController {
      * `getLive`, plus the session's name and `endedAt` so the overlay can
      * render a "session ended" state without needing a second round-trip.
      *
-     * Looked up via `findByIdPublic` — no user filter.
+     * Token validation (ADR 0008): missing or mismatched `token` → 404
+     * (same surface as "session id doesn't exist"), to avoid leaking which
+     * ids are real.
      */
     publicOverlay = async (
         _auth: void,
         request: PublicOverlayRequest,
     ): Promise<PublicOverlayResponse> => {
-        const payload = await this.buildOverlayPayload(request.id);
+        const payload = await this.buildOverlayPayload(request.id, request.token);
         if (!payload) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
         }
@@ -184,7 +201,13 @@ export class SessionController {
             throw ServiceError.build("Invalid session id", HttpStatusCodes.BAD_REQUEST);
         }
 
-        const payload = await this.buildOverlayPayload(sessionId);
+        // Token validation (ADR 0008). `req.query.token` is `string | string[]
+        // | ParsedQs | undefined`; we only accept a plain string. Missing /
+        // wrong-shape / mismatched token → 404 (see `buildOverlayPayload`).
+        const rawToken = req.query.token;
+        const token = typeof rawToken === "string" ? rawToken : undefined;
+
+        const payload = await this.buildOverlayPayload(sessionId, token);
         if (!payload) {
             // Same — pre-flush, so this surfaces as a normal 404.
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
@@ -256,26 +279,54 @@ export class SessionController {
     };
 
     /**
-     * Shared payload builder for both `publicOverlay` (HTTP) and
-     * `streamPublicOverlay` (SSE). Returns `null` when the session id is
-     * unknown so the caller decides how to surface the absence (404 for
-     * HTTP, throw-then-404 for SSE before headers are flushed).
+     * Token-gated payload builder for `publicOverlay` (HTTP) and the initial
+     * frame in `streamPublicOverlay` (SSE). Returns `null` when the session
+     * id is unknown, the token is missing, or the token doesn't match —
+     * callers translate all three into a 404 (ADR 0008: don't leak which
+     * session ids exist).
      */
-    private async buildOverlayPayload(sessionId: number): Promise<PublicOverlayResponse | null> {
+    private async buildOverlayPayload(sessionId: number, token: string | undefined): Promise<PublicOverlayResponse | null> {
+        if (!token) {
+            return null;
+        }
+        const session = await this.sessionRepository.findByIdAndToken(sessionId, token);
+        if (!session) {
+            return null;
+        }
+        return this.assembleOverlayPayload(session.id, session.name, session.endedAt);
+    }
+
+    /**
+     * Trusted variant for the broadcast loop (ADR 0008). The subscriber was
+     * already authorised at `subscribe` time, so this path skips token
+     * re-validation on every tick. Falls back to `findByIdPublic` and
+     * returns `null` only when the session id no longer exists (e.g. it was
+     * deleted while the overlay was open) — the broadcast loop surfaces
+     * that as a synthetic "ended" frame.
+     */
+    private async buildOverlayPayloadTrusted(sessionId: number): Promise<PublicOverlayResponse | null> {
         const session = await this.sessionRepository.findByIdPublic(sessionId);
         if (!session) {
             return null;
         }
-        const fixtureIds = await this.sessionFixtureRepository.findSportmonksFixtureIdsBySessionId(session.id);
+        return this.assembleOverlayPayload(session.id, session.name, session.endedAt);
+    }
+
+    /**
+     * Shared snapshot-assembly path. Lives outside the two `buildOverlay*`
+     * variants so both share the exact same fixture-join + missing-id logic.
+     */
+    private async assembleOverlayPayload(sessionId: number, name: string, endedAt: Date | null): Promise<PublicOverlayResponse> {
+        const fixtureIds = await this.sessionFixtureRepository.findSportmonksFixtureIdsBySessionId(sessionId);
         const fixtures: LiveFixture[] = this.liveSnapshotStore
             ? this.liveSnapshotStore.getMany(fixtureIds)
             : [];
         const presentIds = new Set(fixtures.map(f => f.id));
         const missingFixtureIds = fixtureIds.filter(id => !presentIds.has(id));
         return {
-            sessionId: session.id,
-            name: session.name,
-            endedAt: session.endedAt,
+            sessionId,
+            name,
+            endedAt,
             fixtures,
             missingFixtureIds,
         };
@@ -300,7 +351,10 @@ export class SessionController {
         }
         const serverTime = Date.now();
         for (const sessionId of sessionIds) {
-            const payload = await this.buildOverlayPayload(sessionId);
+            // ADR 0008: skip token validation here — the subscription was
+            // authorised when `subscribe` was called, and tokens don't
+            // expire (rotation only affects future URL openings).
+            const payload = await this.buildOverlayPayloadTrusted(sessionId);
             if (!payload) {
                 // Session was deleted while overlay was open. Force-close
                 // by broadcasting a synthetic "ended" payload so writers
@@ -385,7 +439,12 @@ export class SessionController {
             // Trim trailing slash so concatenation stays clean regardless of
             // operator habits (`http://host` vs `http://host/`).
             const base = this.publicOverlayBaseUrl.replace(/\/+$/, '');
-            summary.overlayUrl = `${base}/overlay/${session.id}`;
+            // Token is the capability (ADR 0008). The encode is paranoia — hex
+            // tokens are URL-safe by construction, but `encodeURIComponent`
+            // keeps the contract explicit so a future token format change
+            // doesn't silently emit a broken URL.
+            const token = encodeURIComponent(session.overlayToken);
+            summary.overlayUrl = `${base}/overlay/${session.id}?token=${token}`;
         }
         return summary;
     }
@@ -445,6 +504,16 @@ export interface EndSessionRequest {
 }
 
 export interface PublicOverlayRequest {
+    id: number;
+    /**
+     * Per-session capability token (ADR 0008). Optional in the request shape
+     * because `parseQuery` returns `undefined` when the query param is
+     * missing; the controller treats `undefined`/empty as a 404.
+     */
+    token?: string;
+}
+
+export interface RotateOverlayTokenRequest {
     id: number;
 }
 
@@ -515,6 +584,18 @@ export class EndSessionValidator extends ObjectValidator<EndSessionRequest> {
 }
 
 export class PublicOverlayValidator extends ObjectValidator<PublicOverlayRequest> {
+    constructor() {
+        super();
+        this.add("id", new NumberValidator());
+        // `token` is optional at the validator layer so a missing token
+        // surfaces as the controller's 404 (ADR 0008: don't leak existence)
+        // rather than a 400 "validation error" that would say the query
+        // shape is wrong.
+        this.add("token", new StringValidator(true));
+    }
+}
+
+export class RotateOverlayTokenValidator extends ObjectValidator<RotateOverlayTokenRequest> {
     constructor() {
         super();
         this.add("id", new NumberValidator());
