@@ -64,7 +64,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         permission?: Permission,
     ): void {
         this.app.get(path, cors(), async (req: Request, res: Response) => {
-            const httpFields = {method: "GET", path};
+            const httpFields = {direction: "inbound", method: "GET", path};
             try {
                 const auth = await this.authenticate(req);
                 if (permission) {
@@ -107,7 +107,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         permission?: Permission,
     ): void {
         this.app[method](path, cors(), async (req: Request, res: Response) => {
-            const httpFields = {method: method.toUpperCase(), path};
+            const httpFields = {direction: "inbound", method: method.toUpperCase(), path};
             try {
                 const auth = await this.authenticate(req);
 
@@ -184,7 +184,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         }
     }
 
-    private handleError(httpFields: {method: string; path: string}, res: Response, e: unknown): void {
+    private handleError(httpFields: {direction: string; method: string; path: string}, res: Response, e: unknown): void {
         if (e instanceof ServiceError) {
             this.logger.error(e.message, {...httpFields, statusCode: e.getStatusCode()});
             res.status(e.getStatusCode()).send({

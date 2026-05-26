@@ -40,15 +40,40 @@ class Logger {
 }
 ```
 
-The format string renders, in order:
+### Log line shape
 
-- timestamp
-- level (colorized)
-- `statusCode` (when present in fields)
-- HTTP details: `${method} ${path}` for inbound, `${method} ${url}` for outbound, blank otherwise — derived from fields
-- logTag (component name)
-- message
-- stack (when present)
+```
+[<logTag>] <timestamp> <level> [<direction>] [<statusCode>] [<method path-or-url>][: <message>]
+```
+
+Bracketed segments are optional — rendered only when the relevant fields
+are present in the `fields` argument.
+
+Examples:
+
+| Case | Line |
+|---|---|
+| Inbound success | `[Router] 2026-05-26 12:00:00 info inbound 200 POST /sessions/42` |
+| Inbound error | `[Router] 2026-05-26 12:00:00 error inbound 404 GET /sessions/999: Session not found` |
+| Outbound success | `[SportmonksHttpClient] 2026-05-26 12:00:00 info outbound 200 GET https://api.sportmonks.com/...` |
+| Outbound error | `[SportmonksHttpClient] 2026-05-26 12:00:00 error outbound 502 GET https://...: call failed` |
+| Job / lifecycle | `[FixturePoller] 2026-05-26 12:00:00 info: FixturePoller started` |
+
+Success log lines (inbound and outbound) end cleanly at method+path/url
+with an empty message. Errors carry a descriptive message after the
+colon. Job lines have no HTTP fields and just print the message.
+
+### Special-cased field names
+
+The formatter picks up these keys for inline rendering:
+
+- `direction` — `"inbound"` (set by `BaseRouter`) or `"outbound"` (set by `SportmonksHttpClient`).
+- `statusCode` — HTTP status code. Set on both directions.
+- `method` + `path` — inbound HTTP details.
+- `method` + `url`  — outbound HTTP details.
+
+Every other field stays attached to the structured log event and is
+visible to JSON transports.
 
 ### Handler signature
 

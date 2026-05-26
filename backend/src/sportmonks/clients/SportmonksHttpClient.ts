@@ -80,7 +80,7 @@ export class SportmonksHttpClient {
         const endpointMetricLabel = endpointLabel(loggedEndpoint);
         // HTTP detail fields rendered inline in the log line by the formatter
         // (ADR 0007). `SportmonksHttpClient` only issues GETs today.
-        const httpFields = {method: "GET", url};
+        const httpFields = {direction: "outbound", method: "GET", url};
 
         const startedAt = Date.now();
         const response = await this.fetchImpl(url, {
@@ -102,11 +102,11 @@ export class SportmonksHttpClient {
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
             sportmonksRateLimitThrottledTotal.labels(entity).inc();
-            this.logger.warning("SportMonks throttled", {
+            this.logger.warning("throttled", {
                 ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: 429,
+                statusCode: 429,
                 duration_ms: durationMs,
             });
             throw new SportmonksHttpError(
@@ -138,11 +138,11 @@ export class SportmonksHttpClient {
             sportmonksApiCallsTotal
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
-            this.logger.error("SportMonks call failed", {
+            this.logger.error("call failed", {
                 ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: response.status,
+                statusCode: response.status,
                 duration_ms: durationMs,
                 remaining: rateLimit?.remaining,
             });
@@ -158,11 +158,11 @@ export class SportmonksHttpClient {
             sportmonksApiCallsTotal
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
-            this.logger.error("SportMonks response was not valid JSON", {
+            this.logger.error("response was not valid JSON", {
                 ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: response.status,
+                statusCode: response.status,
                 duration_ms: durationMs,
             });
             throw new SportmonksHttpError(
@@ -176,11 +176,11 @@ export class SportmonksHttpClient {
         sportmonksApiCallsTotal
             .labels(entity, endpointMetricLabel, "success")
             .inc();
-        this.logger.info("SportMonks call ok", {
+        this.logger.info("", {
             ...httpFields,
             entity,
             endpoint: loggedEndpoint,
-            status: response.status,
+            statusCode: response.status,
             duration_ms: durationMs,
             remaining: rateLimit?.remaining,
         });

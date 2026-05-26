@@ -3,11 +3,17 @@ import * as winston from 'winston';
 /**
  * Structured-fields object for a single log event. Free-form by design —
  * callers add whatever keys help debugging. A few keys get special rendering
- * in the log line (ADR 0007):
+ * in the log line (ADR 0007); the line shape is:
  *
- *   - `statusCode` — printed between level and HTTP details when present.
- *   - `method` + `path`  — inbound HTTP details, rendered as `METHOD path`.
- *   - `method` + `url`   — outbound HTTP details, rendered as `METHOD url`.
+ *   `[logTag] timestamp level [direction] [statusCode] [method path/url][: message]`
+ *
+ * Rendered fields:
+ *   - `direction`  — `"inbound"` or `"outbound"`. Inbound is set by
+ *                    `BaseRouter`, outbound by `SportmonksHttpClient`.
+ *   - `statusCode` — HTTP status. Set on both inbound (by `BaseRouter`)
+ *                    and outbound (by `SportmonksHttpClient`).
+ *   - `method` + `path` — inbound HTTP details.
+ *   - `method` + `url`  — outbound HTTP details.
  *
  * Every other field is still attached to the winston `info` and can be
  * picked up by JSON transports.
@@ -27,11 +33,13 @@ export class Logger {
                         winston.format.timestamp({format: 'YYYY-MM-DD HH:mm:ss'}),
                         winston.format.colorize(),
                         winston.format.printf((info) => {
+                            const tag = `[${info.logTag}]`;
+                            const direction = typeof info.direction === "string" ? ` ${info.direction}` : "";
                             const status = info.statusCode != null ? ` ${info.statusCode}` : "";
                             const httpDetails = formatHttpDetails(info);
                             const stack = info.stack != null ? `\n${info.stack}` : "";
                             const message = info.message !== "" ? `: ${info.message}` : "";
-                            return `${info.timestamp} ${info.level}${status} ${httpDetails}[${info.logTag}]${message}${stack}`;
+                            return `${tag} ${info.timestamp} ${info.level}${direction}${status}${httpDetails}${message}${stack}`;
                         })
                     )
                 })
@@ -76,10 +84,10 @@ function formatHttpDetails(info: Record<string, unknown>): string {
     const path = typeof info.path === "string" ? info.path : undefined;
     const url = typeof info.url === "string" ? info.url : undefined;
     if (method && path) {
-        return `${method} ${path} `;
+        return ` ${method} ${path}`;
     }
     if (method && url) {
-        return `${method} ${url} `;
+        return ` ${method} ${url}`;
     }
     return "";
 }
