@@ -41,6 +41,67 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         this.register('delete', path, requestHandler, BaseRouter.parseBody, validator, permission);
     }
 
+    /**
+     * Register a Server-Sent Events route (ADR 0006). Unlike `get`/`post`/etc.,
+     * the handler is given the raw Express `req`/`res` because SSE responses
+     * are streamed (`text/event-stream`, no `{data, code}` envelope, no
+     * `Content-Length`). The router takes care of:
+     *   - authentication and permission checks (same flow as the other verbs);
+     *   - setting the SSE response headers and flushing them so the client
+     *     receives an open stream before the handler writes its first frame.
+     *
+     * After header flush, the handler owns the connection lifecycle: it must
+     * write frames in `data: <json>\n\n` form, install `req.on('close', ...)`
+     * cleanup, and call `res.end()` when the stream is meant to close.
+     *
+     * Errors thrown before headers are flushed are routed through the standard
+     * JSON error handler (so callers see a proper 4xx/5xx). Errors after that
+     * point can't be reported to the client mid-stream — they're logged and
+     * the socket is closed.
+     */
+    public sse(
+        path: string,
+        handler: (ctx: Context, auth: AuthType, req: Request, res: Response) => void | Promise<void>,
+        permission?: Permission,
+    ): void {
+        this.app.get(path, cors(), async (req: Request, res: Response) => {
+            const ctx = ContextFactory.createRequestContext(path, "dummy", "GET");
+            try {
+                const auth = await this.authenticate(req);
+                if (permission) {
+                    this.checkPermission(auth, permission.resource, permission.action);
+                }
+
+                // SSE response framing — see RFC EventSource for header
+                // requirements. `X-Accel-Buffering: no` opts out of nginx
+                // buffering so frames reach the client immediately.
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
+                res.setHeader('X-Accel-Buffering', 'no');
+                res.flushHeaders();
+
+                this.logger.info(ctx, "", {statusCode: 200});
+                await handler(ctx, auth, req, res);
+            } catch (e) {
+                if (!res.headersSent) {
+                    this.handleError(ctx, res, e);
+                } else {
+                    // Headers already sent — we can't send a JSON error. Log
+                    // and close the stream so the client sees a clean EOF
+                    // rather than a hung connection.
+                    const message = e instanceof Error ? e.message : String(e);
+                    this.logger.error(ctx, `SSE handler error after headers sent: ${message}`, {});
+                    try {
+                        res.end();
+                    } catch {
+                        // best-effort — socket may already be torn down.
+                    }
+                }
+            }
+        });
+    }
+
     private register<RequestType, ResponseType>(
         method: HttpMethod,
         path: string,

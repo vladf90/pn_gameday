@@ -14,6 +14,15 @@ export interface FixturePollerOptions {
     intervalMs: number;
     /** Max IDs per `/fixtures/multi` call. From `SPORTMONKS_MULTI_FIXTURE_BATCH_SIZE`. */
     batchSize: number;
+    /**
+     * Optional hook invoked at the end of every tick — after the
+     * `LiveSnapshotStore` writes have settled, regardless of whether the
+     * tick succeeded or threw. Used by the overlay SSE bridge (ADR 0006)
+     * to broadcast fresh snapshots to subscribers without coupling the
+     * poller to that mechanism. Errors thrown from the hook are caught
+     * and logged so they cannot crash the loop.
+     */
+    onTickFinished?: () => void | Promise<void>;
 }
 
 /**
@@ -149,6 +158,19 @@ export class FixturePoller {
             // and let the loop continue on the next tick.
             const message = e instanceof Error ? e.message : String(e);
             this.logger.error(ctx, "FixturePoller tick failed", {error: message});
+        }
+
+        // `onTickFinished` runs whether the tick succeeded or threw — the
+        // overlay bridge wants to fan out even a stale snapshot rather than
+        // pause broadcasts during transient SportMonks failures. Errors from
+        // the hook itself are isolated so they can't break the poll loop.
+        if (this.options.onTickFinished !== undefined) {
+            try {
+                await this.options.onTickFinished();
+            } catch (e) {
+                const message = e instanceof Error ? e.message : String(e);
+                this.logger.error(ctx, "FixturePoller onTickFinished failed", {error: message});
+            }
         }
     }
 

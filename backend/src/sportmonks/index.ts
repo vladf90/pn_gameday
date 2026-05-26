@@ -15,6 +15,7 @@ export {TeamsClient, TeamsQueryOptions} from "./clients/TeamsClient";
 export {TopscorersClient, TopscorersQueryOptions} from "./clients/TopscorersClient";
 export {RateLimitTracker, RateLimitState} from "./RateLimitTracker";
 export {LiveSnapshotStore} from "./LiveSnapshotStore";
+export {OverlayEventBus, OverlayPayload, OverlayWriter} from "./OverlayEventBus";
 export {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 export {SessionFixtureProvider} from "./SessionFixtureProvider";
 export {FixturePoller, FixturePollerOptions} from "./FixturePoller";

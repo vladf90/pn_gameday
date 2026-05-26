@@ -30,6 +30,7 @@ import {
     FixturePoller,
     FixturesClient,
     LiveSnapshotStore,
+    OverlayEventBus,
     RateLimitTracker,
     SessionAutoCloser,
     SessionFixtureProvider,
@@ -109,11 +110,18 @@ export class Bootstrap {
         // public origin the frontend serves from; when unset, session responses
         // simply omit `overlayUrl` (ADR 0005).
         const publicOverlayBaseUrl = process.env.PUBLIC_OVERLAY_BASE_URL || undefined;
+        // Overlay SSE pub/sub (ADR 0006). Constructed unconditionally so the
+        // streaming route can mount even when SportMonks is disabled — in that
+        // mode the controller still sends the initial snapshot frame (empty
+        // `fixtures`, all ids in `missingFixtureIds`) and the connection just
+        // never receives further updates because no poller is running.
+        const overlayEventBus = new OverlayEventBus();
         const sessionController = new SessionController(
             sessionRepository,
             sessionFixtureRepository,
             this.liveSnapshotStore,
             publicOverlayBaseUrl,
+            overlayEventBus,
         );
 
         // Default fixture-selection provider — needs the repository's TypeORM
@@ -161,6 +169,14 @@ export class Bootstrap {
         // operator already chose to attach to a session.
         router.get("/public/sessions/:id/overlay", sessionController.publicOverlay, new PublicOverlayValidator());
 
+        // Public OBS overlay SSE stream (ADR 0006). Same auth/capability
+        // shape as the JSON endpoint above (URL is the capability), but
+        // pushes a fresh payload per FixturePoller tick instead of relying
+        // on the client to poll. `BaseRouter.sse` sets the streaming headers
+        // and hands the raw req/res to the handler, which manages the
+        // subscription lifecycle and heartbeat.
+        router.sse("/public/sessions/:id/overlay/stream", sessionController.streamPublicOverlay);
+
         // Bring up the SportMonks fixture poller once all its dependencies exist.
         // When `SPORTMONKS_ENABLED=false` the client/store remain undefined and we
         // skip wiring entirely — the integration is a no-op in that mode.
@@ -174,6 +190,12 @@ export class Bootstrap {
                 {
                     intervalMs: this.pollIntervalMs,
                     batchSize: this.multiFixtureBatchSize,
+                    // Fan out the freshly-written snapshot to overlay SSE
+                    // subscribers (ADR 0006). The hook is awaited inside the
+                    // poller so the next tick won't be scheduled until this
+                    // broadcast finishes — that keeps DB reads sequential and
+                    // matches the existing "ticks never overlap" guarantee.
+                    onTickFinished: () => sessionController.broadcastOverlayUpdates(),
                 },
             );
             this.fixturePoller.start();

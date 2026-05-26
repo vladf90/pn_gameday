@@ -1,3 +1,4 @@
+import { Request, Response } from "express";
 import { Logger } from "../Logger";
 import { Context } from "../Logger/Context";
 import { SessionRepository, SessionStatusFilter } from "../database/repositories/SessionRepository";
@@ -9,7 +10,13 @@ import { ObjectValidator } from "../validator/ObjectValidator";
 import { StringValidator } from "../validator/StringValidator";
 import { NumberValidator } from "../validator/NumberValidator";
 import { LiveSnapshotStore, LiveFixture } from "../sportmonks";
+import { OverlayEventBus, OverlayPayload } from "../sportmonks/OverlayEventBus";
 import { Session } from "../database/entities/Session";
+
+/** SSE keep-alive cadence (ADR 0006). Sent as a `:\n\n` comment frame so
+ *  intermediary proxies don't terminate idle connections. Slightly under
+ *  30s because some hosted proxies idle-timeout at the 30s mark. */
+const SSE_HEARTBEAT_INTERVAL_MS = 25_000;
 
 export class SessionController {
     private readonly logger = new Logger("SessionController");
@@ -23,11 +30,17 @@ export class SessionController {
     // (e.g. `http://localhost:5173`). When unset, responses omit `overlayUrl`
     // rather than emit a malformed link — clients can fall back to computing
     // one from `window.location.origin`.
+    //
+    // `overlayEventBus` is the per-session subscriber registry used by the
+    // SSE stream handler (ADR 0006). Always constructed in Bootstrap so the
+    // route can mount regardless of SportMonks being enabled — pushes just
+    // never happen when there's no poller wired up.
     constructor(
         private readonly sessionRepository: SessionRepository,
         private readonly sessionFixtureRepository: SessionFixtureRepository,
         private readonly liveSnapshotStore: LiveSnapshotStore | undefined,
         private readonly publicOverlayBaseUrl: string | undefined,
+        private readonly overlayEventBus: OverlayEventBus,
     ) {}
 
     getAll = async (_ctx: Context, auth: UserAuth, request: ListSessionsRequest): Promise<SessionSummary[]> => {
@@ -129,9 +142,132 @@ export class SessionController {
         _auth: void,
         request: PublicOverlayRequest,
     ): Promise<PublicOverlayResponse> => {
-        const session = await this.sessionRepository.findByIdPublic(request.id);
-        if (!session) {
+        const payload = await this.buildOverlayPayload(request.id);
+        if (!payload) {
             throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+        return payload;
+    };
+
+    /**
+     * Server-Sent Events stream for the public OBS overlay (ADR 0006).
+     *
+     * Lifecycle:
+     *   1. 404 if the session id is unknown — same lookup as `publicOverlay`.
+     *   2. Send one immediate snapshot frame so the overlay can render
+     *      without waiting up to a full poll interval (~5s) for the first
+     *      push.
+     *   3. If the session is already ended, send the snapshot (with
+     *      `endedAt` set) and close the stream. The overlay keeps the
+     *      final frame on screen — per ADR 0006 §4 we do not push an
+     *      "ended" message of our own.
+     *   4. Otherwise subscribe to `overlayEventBus` for this session id.
+     *      Frames are pushed by the `FixturePoller` `onTickFinished` hook
+     *      wired in `Bootstrap`, one per ~5s tick.
+     *   5. Run a 25s heartbeat (`:\n\n` SSE comment) so intermediary
+     *      proxies don't terminate idle connections during long stretches
+     *      between score changes.
+     *   6. On `req.close` (client navigated away / OBS reload / process
+     *      tear-down) unsubscribe and clear the heartbeat.
+     */
+    streamPublicOverlay = async (
+        _ctx: Context,
+        _auth: void,
+        req: Request,
+        res: Response,
+    ): Promise<void> => {
+        // Path is `/public/sessions/:id/overlay/stream`, so `id` is in params.
+        // `BaseRouter.sse` doesn't run the `ObjectValidator` pipeline (it's
+        // bypassing the normal request-parsing path), so we validate inline.
+        const rawId = req.params.id;
+        const sessionId = Number.parseInt(rawId, 10);
+        if (!Number.isFinite(sessionId) || sessionId <= 0) {
+            // Headers haven't been flushed yet when we throw here — the
+            // BaseRouter wrapper catches and renders a normal 4xx JSON.
+            throw ServiceError.build("Invalid session id", HttpStatusCodes.BAD_REQUEST);
+        }
+
+        const payload = await this.buildOverlayPayload(sessionId);
+        if (!payload) {
+            // Same — pre-flush, so this surfaces as a normal 404.
+            throw ServiceError.build("Session not found", HttpStatusCodes.NOT_FOUND);
+        }
+
+        // Headers were already set + flushed by `BaseRouter.sse` before this
+        // handler ran, so any write here is a frame the client will see.
+        //
+        // The writer also drives the terminal-frame protocol from ADR 0006 §4:
+        // when a payload carries a non-null `endedAt`, we write the final frame
+        // AND close the response, then return `false` so the bus evicts us.
+        // This collapses "broadcast last frame" and "tear down stream" into a
+        // single event the broadcaster doesn't have to special-case.
+        const writeFrame = (p: OverlayPayload): boolean => {
+            if (res.writableEnded || res.destroyed) {
+                return false;
+            }
+            try {
+                res.write(`data: ${JSON.stringify(p)}\n\n`);
+                if (p.endedAt !== null) {
+                    res.end();
+                    return false;
+                }
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
+        const initial: OverlayPayload = { ...payload, serverTime: Date.now() };
+
+        // If the session is already ended, deliver the final frame and
+        // close. The client renders whatever scores were on the snapshot —
+        // there is no follow-up `endedAt` overlay text (ADR 0006 §4).
+        if (initial.endedAt !== null) {
+            writeFrame(initial);
+            res.end();
+            return;
+        }
+
+        // Send the initial frame before subscribing so a poll-tick race
+        // can't slip an out-of-order frame ahead of it.
+        writeFrame(initial);
+
+        const unsubscribe = this.overlayEventBus.subscribe(sessionId, writeFrame);
+
+        // SSE comment heartbeat. Anything starting with `:` is ignored by
+        // `EventSource` and serves only to keep the TCP/HTTP path warm
+        // through proxies that idle-timeout long-lived connections.
+        const heartbeat = setInterval(() => {
+            if (res.writableEnded || res.destroyed) {
+                clearInterval(heartbeat);
+                return;
+            }
+            try {
+                res.write(`: heartbeat ${Date.now()}\n\n`);
+            } catch {
+                clearInterval(heartbeat);
+            }
+        }, SSE_HEARTBEAT_INTERVAL_MS);
+
+        const cleanup = () => {
+            clearInterval(heartbeat);
+            unsubscribe();
+        };
+
+        req.on("close", cleanup);
+        req.on("error", cleanup);
+    };
+
+    /**
+     * Shared payload builder for both `publicOverlay` (HTTP) and
+     * `streamPublicOverlay` (SSE). Returns `null` when the session id is
+     * unknown so the caller decides how to surface the absence (404 for
+     * HTTP, throw-then-404 for SSE before headers are flushed).
+     */
+    private async buildOverlayPayload(sessionId: number): Promise<PublicOverlayResponse | null> {
+        const session = await this.sessionRepository.findByIdPublic(sessionId);
+        if (!session) {
+            return null;
         }
         const fixtureIds = await this.sessionFixtureRepository.findSportmonksFixtureIdsBySessionId(session.id);
         const fixtures: LiveFixture[] = this.liveSnapshotStore
@@ -146,6 +282,45 @@ export class SessionController {
             fixtures,
             missingFixtureIds,
         };
+    }
+
+    /**
+     * Called by `Bootstrap`'s `FixturePoller.onTickFinished` hook (ADR 0006).
+     * Walks the bus's currently-subscribed session ids and broadcasts one
+     * fresh payload per session. The DB hits are bounded by viewer activity,
+     * not by total sessions.
+     *
+     * Sessions that have flipped to ended (auto-closed or force-ended) push
+     * one final frame with `endedAt` set — the writer recognises that and
+     * closes the underlying response after the write (see `writeFrame`).
+     * After that the subscribers self-evict and no further broadcasts hit
+     * those clients.
+     */
+    broadcastOverlayUpdates = async (): Promise<void> => {
+        const sessionIds = this.overlayEventBus.subscribedSessionIds();
+        if (sessionIds.length === 0) {
+            return;
+        }
+        const serverTime = Date.now();
+        for (const sessionId of sessionIds) {
+            const payload = await this.buildOverlayPayload(sessionId);
+            if (!payload) {
+                // Session was deleted while overlay was open. Force-close
+                // by broadcasting a synthetic "ended" payload so writers
+                // tear down their streams instead of waiting for the next
+                // tick (which will hit the same null lookup).
+                this.overlayEventBus.broadcast(sessionId, {
+                    sessionId,
+                    name: "",
+                    endedAt: new Date(),
+                    fixtures: [],
+                    missingFixtureIds: [],
+                    serverTime,
+                });
+                continue;
+            }
+            this.overlayEventBus.broadcast(sessionId, { ...payload, serverTime });
+        }
     };
 
     attachFixture = async (
