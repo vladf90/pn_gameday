@@ -33,14 +33,18 @@ export class SessionFixtureRepository {
     }
 
     /**
-     * Returns the deduped union of every `sportmonks_fixture_id` referenced by any
-     * session. Used by the SportMonks poller to determine which upstream fixtures
-     * still need to be tracked.
+     * Returns the deduped union of every `sportmonks_fixture_id` referenced by
+     * an **active** session (i.e. `session.ended_at IS NULL`). Used by the
+     * SportMonks poller to determine which upstream fixtures still need to be
+     * tracked — fixtures attached only to ended sessions are excluded so the
+     * poller stops hitting SportMonks for them.
      */
-    async findAllSportmonksFixtureIds(): Promise<number[]> {
+    async findSportmonksFixtureIdsForActiveSessions(): Promise<number[]> {
         const rows = await this.repository
             .createQueryBuilder("sf")
+            .innerJoin("session", "s", "s.id = sf.session_id")
             .select("DISTINCT sf.sportmonks_fixture_id", "sportmonks_fixture_id")
+            .where("s.ended_at IS NULL")
             .getRawMany<{ sportmonks_fixture_id: string | number }>();
         return rows.map(row => Number(row.sportmonks_fixture_id));
     }
