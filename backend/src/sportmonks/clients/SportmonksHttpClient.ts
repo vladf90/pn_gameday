@@ -1,5 +1,4 @@
 import {Logger} from "../../Logger";
-import {Context, ContextFactory} from "../../Logger/Context";
 import {RateLimitTracker} from "../RateLimitTracker";
 import {
     endpointLabel,
@@ -22,8 +21,6 @@ export interface GetOptions {
      * messages. Entity clients pin this (e.g. `"Fixture"`, `"League"`).
      */
     entity: string;
-    /** Optional context for structured logging; falls back to a process context. */
-    ctx?: Context;
 }
 
 /**
@@ -77,11 +74,16 @@ export class SportmonksHttpClient {
         query: Record<string, string | number> | undefined,
         options: GetOptions,
     ): Promise<T> {
-        const ctx = options.ctx ?? ContextFactory.createProcessContext("sportmonks");
         const entity = options.entity;
         const url = this.buildUrl(path, query);
         const loggedEndpoint = this.stripQuery(path);
         const endpointMetricLabel = endpointLabel(loggedEndpoint);
+        // HTTP detail fields rendered inline in the log line by the formatter
+        // (ADR 0007). `SportmonksHttpClient` only issues GETs today. The
+        // logged URL omits query params — they can be high-cardinality
+        // (includes, multi IDs) and add noise without aiding debugging,
+        // since `entity` + `endpoint` already pin down the call.
+        const httpFields = {direction: "outbound", method: "GET", url: `${this.baseUrl}${loggedEndpoint}`};
 
         const startedAt = Date.now();
         const response = await this.fetchImpl(url, {
@@ -103,10 +105,11 @@ export class SportmonksHttpClient {
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
             sportmonksRateLimitThrottledTotal.labels(entity).inc();
-            this.logger.warning(ctx, "SportMonks throttled", {
+            this.logger.warning("throttled", {
+                ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: 429,
+                statusCode: 429,
                 duration_ms: durationMs,
             });
             throw new SportmonksHttpError(
@@ -138,10 +141,11 @@ export class SportmonksHttpClient {
             sportmonksApiCallsTotal
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
-            this.logger.error(ctx, "SportMonks call failed", {
+            this.logger.error("call failed", {
+                ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: response.status,
+                statusCode: response.status,
                 duration_ms: durationMs,
                 remaining: rateLimit?.remaining,
             });
@@ -157,10 +161,11 @@ export class SportmonksHttpClient {
             sportmonksApiCallsTotal
                 .labels(entity, endpointMetricLabel, "error")
                 .inc();
-            this.logger.error(ctx, "SportMonks response was not valid JSON", {
+            this.logger.error("response was not valid JSON", {
+                ...httpFields,
                 entity,
                 endpoint: loggedEndpoint,
-                status: response.status,
+                statusCode: response.status,
                 duration_ms: durationMs,
             });
             throw new SportmonksHttpError(
@@ -174,10 +179,11 @@ export class SportmonksHttpClient {
         sportmonksApiCallsTotal
             .labels(entity, endpointMetricLabel, "success")
             .inc();
-        this.logger.info(ctx, "SportMonks call ok", {
+        this.logger.info("", {
+            ...httpFields,
             entity,
             endpoint: loggedEndpoint,
-            status: response.status,
+            statusCode: response.status,
             duration_ms: durationMs,
             remaining: rateLimit?.remaining,
         });

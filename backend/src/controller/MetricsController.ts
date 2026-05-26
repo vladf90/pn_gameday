@@ -1,5 +1,4 @@
 import {Logger} from "../Logger";
-import {Context} from "../Logger/Context";
 import {RawResponse} from "../router/BaseRouter";
 import {ServiceError} from "../utils/ServiceError";
 import * as HttpStatusCodes from "http-status-codes";
@@ -20,7 +19,7 @@ export class MetricsController {
 
     private readonly logger = new Logger("MetricsController");
 
-    handle = async (ctx: Context, _auth: void): Promise<RawResponse> => {
+    handle = async (_auth: void): Promise<RawResponse> => {
         try {
             const body = await register.metrics();
             return {
@@ -28,7 +27,7 @@ export class MetricsController {
                 contentType: register.contentType,
             };
         } catch (e) {
-            this.logger.error(ctx, "Failed to render Prometheus metrics", {
+            this.logger.error("Failed to render Prometheus metrics", {
                 error: e instanceof Error ? e.message : String(e),
             });
             throw ServiceError.build("Failed to render metrics", HttpStatusCodes.INTERNAL_SERVER_ERROR);

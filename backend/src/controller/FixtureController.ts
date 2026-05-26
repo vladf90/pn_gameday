@@ -1,4 +1,3 @@
-import { Context } from "../Logger/Context";
 import { FixturesClient, FixtureByDate } from "../sportmonks";
 import { UserAuth } from "../router/UserAuthRouter";
 import { ObjectValidator } from "../validator/ObjectValidator";
@@ -15,13 +14,11 @@ export class FixtureController {
     constructor(private readonly fixturesClient: FixturesClient) {}
 
     getByDate = async (
-        ctx: Context,
         _auth: UserAuth,
         request: GetFixturesByDateRequest,
     ): Promise<FixtureByDate[]> => {
         return this.fixturesClient.getByDate<FixtureByDate>(request.date, {
             includes: ["participants", "league", "scores", "state"],
-            ctx,
         });
     };
 }

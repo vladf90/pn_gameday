@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Standing, StandingInclude} from "../types/Standing";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface StandingsQueryOptions {
     includes?: StandingInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -21,7 +19,6 @@ export class StandingsClient {
     getAll<T extends Standing = Standing>(opts: StandingsQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/standings", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -29,7 +26,6 @@ export class StandingsClient {
     getBySeason<T extends Standing = Standing>(seasonId: number, opts: StandingsQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/standings/seasons/${seasonId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -37,7 +33,6 @@ export class StandingsClient {
     getByRound<T extends Standing = Standing>(roundId: number, opts: StandingsQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/standings/rounds/${roundId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -48,7 +43,6 @@ export class StandingsClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/standings/corrections/seasons/${seasonId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -59,7 +53,6 @@ export class StandingsClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/standings/live/leagues/${leagueId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

@@ -1,6 +1,5 @@
 import {IRouter} from "./IRouter";
 import {Application, Request, Response} from "express";
-import {Context, ContextFactory} from "../Logger/Context";
 import {ServiceError} from "../utils/ServiceError";
 import {Validator} from "../validator/Validator";
 import {Logger} from "../Logger";
@@ -13,7 +12,7 @@ type HttpMethod = 'get' | 'post' | 'patch' | 'delete';
 type Permission = { resource: string; action: string };
 
 type RequestHandler<AuthType, RequestType, ResponseType> =
-    (ctx: Context, authType: AuthType, request: RequestType) => Promise<ResponseType>;
+    (authType: AuthType, request: RequestType) => Promise<ResponseType>;
 
 type RequestParser = (req: Request) => Record<string, unknown>;
 
@@ -61,11 +60,11 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
      */
     public sse(
         path: string,
-        handler: (ctx: Context, auth: AuthType, req: Request, res: Response) => void | Promise<void>,
+        handler: (auth: AuthType, req: Request, res: Response) => void | Promise<void>,
         permission?: Permission,
     ): void {
         this.app.get(path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", "GET");
+            const httpFields = {direction: "inbound", method: "GET", path};
             try {
                 const auth = await this.authenticate(req);
                 if (permission) {
@@ -81,17 +80,14 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
                 res.setHeader('X-Accel-Buffering', 'no');
                 res.flushHeaders();
 
-                this.logger.info(ctx, "", {statusCode: 200});
-                await handler(ctx, auth, req, res);
+                this.logger.info("", {...httpFields, statusCode: 200});
+                await handler(auth, req, res);
             } catch (e) {
                 if (!res.headersSent) {
-                    this.handleError(ctx, res, e);
+                    this.handleError(httpFields, res, e);
                 } else {
-                    // Headers already sent — we can't send a JSON error. Log
-                    // and close the stream so the client sees a clean EOF
-                    // rather than a hung connection.
                     const message = e instanceof Error ? e.message : String(e);
-                    this.logger.error(ctx, `SSE handler error after headers sent: ${message}`, {});
+                    this.logger.error(`SSE handler error after headers sent: ${message}`, httpFields);
                     try {
                         res.end();
                     } catch {
@@ -111,7 +107,7 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         permission?: Permission,
     ): void {
         this.app[method](path, cors(), async (req: Request, res: Response) => {
-            const ctx = ContextFactory.createRequestContext(path, "dummy", method.toUpperCase());
+            const httpFields = {direction: "inbound", method: method.toUpperCase(), path};
             try {
                 const auth = await this.authenticate(req);
 
@@ -128,11 +124,11 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
                     }
                 }
 
-                const response = await requestHandler(ctx, auth, request);
-                this.logger.info(ctx, "", {statusCode: 200});
+                const response = await requestHandler(auth, request);
+                this.logger.info("", {...httpFields, statusCode: 200});
                 this.sendResponse(res, response);
             } catch (e) {
-                this.handleError(ctx, res, e);
+                this.handleError(httpFields, res, e);
             }
         });
     }
@@ -188,9 +184,9 @@ export abstract class BaseRouter<AuthType extends IPermission | void> implements
         }
     }
 
-    private handleError(ctx: Context, res: Response, e: unknown): void {
+    private handleError(httpFields: {direction: string; method: string; path: string}, res: Response, e: unknown): void {
         if (e instanceof ServiceError) {
-            this.logger.error(ctx, e.message, {statusCode: e.getStatusCode()});
+            this.logger.error(e.message, {...httpFields, statusCode: e.getStatusCode()});
             res.status(e.getStatusCode()).send({
                 message: e.message,
                 code: e.getStatusCode(),

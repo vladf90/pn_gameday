@@ -1,5 +1,24 @@
 import * as winston from 'winston';
-import {Context} from "./Context";
+
+/**
+ * Structured-fields object for a single log event. Free-form by design —
+ * callers add whatever keys help debugging. A few keys get special rendering
+ * in the log line (ADR 0007); the line shape is:
+ *
+ *   `[logTag] timestamp level [direction] [statusCode] [method path/url][: message]`
+ *
+ * Rendered fields:
+ *   - `direction`  — `"inbound"` or `"outbound"`. Inbound is set by
+ *                    `BaseRouter`, outbound by `SportmonksHttpClient`.
+ *   - `statusCode` — HTTP status. Set on both inbound (by `BaseRouter`)
+ *                    and outbound (by `SportmonksHttpClient`).
+ *   - `method` + `path` — inbound HTTP details.
+ *   - `method` + `url`  — outbound HTTP details.
+ *
+ * Every other field is still attached to the winston `info` and can be
+ * picked up by JSON transports.
+ */
+export type LogFields = Record<string, unknown>;
 
 export class Logger {
     private logger: winston.Logger;
@@ -14,14 +33,13 @@ export class Logger {
                         winston.format.timestamp({format: 'YYYY-MM-DD HH:mm:ss'}),
                         winston.format.colorize(),
                         winston.format.printf((info) => {
-                            const context = info.context as Context | null | undefined;
-                            let httpDetails = "";
-                            if (context != null) {
-                                httpDetails = context.format();
-                            }
+                            const tag = `[${info.logTag}]`;
+                            const direction = typeof info.direction === "string" ? ` ${info.direction}` : "";
+                            const status = info.statusCode != null ? ` ${info.statusCode}` : "";
+                            const httpDetails = formatHttpDetails(info);
                             const stack = info.stack != null ? `\n${info.stack}` : "";
                             const message = info.message !== "" ? `: ${info.message}` : "";
-                            return `${info.timestamp} ${info.level} ${info.statusCode} ${httpDetails}[${info.logTag}]${message}${stack}`
+                            return `${info.timestamp} ${tag} ${info.level}${direction}${status}${httpDetails}${message}${stack}`;
                         })
                     )
                 })
@@ -30,16 +48,16 @@ export class Logger {
         this.logTag = logTag;
     }
 
-    info(ctx: Context, message: string, info?: LogInfo) {
-        this.log('info', ctx, message, info);
+    info(message: string, fields?: LogFields) {
+        this.log('info', message, fields);
     }
 
-    warning(ctx: Context, message: string, info?: LogInfo) {
-        this.log('warning', ctx, message, info);
+    warning(message: string, fields?: LogFields) {
+        this.log('warning', message, fields);
     }
 
-    error(ctx: Context, message: string, info?: LogInfo) {
-        this.log('error', ctx, message, info);
+    error(message: string, fields?: LogFields) {
+        this.log('error', message, fields);
     }
 
     exception(e: Error) {
@@ -47,21 +65,29 @@ export class Logger {
             level: 'crit',
             logTag: this.logTag,
             message: String(e),
-            stack: e.stack
-        })
+            stack: e.stack,
+        });
     }
 
-    private log(logLevel: string, ctx: Context, message: string, info: LogInfo = {}) {
+    private log(level: string, message: string, fields: LogFields = {}) {
         this.logger.log({
+            level,
             logTag: this.logTag,
-            message: message,
-            level: logLevel,
-            context: ctx,
-            ...info
+            message,
+            ...fields,
         });
     }
 }
 
-interface LogInfo {
-    [key: string]: unknown;
+function formatHttpDetails(info: Record<string, unknown>): string {
+    const method = typeof info.method === "string" ? info.method : undefined;
+    const path = typeof info.path === "string" ? info.path : undefined;
+    const url = typeof info.url === "string" ? info.url : undefined;
+    if (method && path) {
+        return ` ${method} ${path}`;
+    }
+    if (method && url) {
+        return ` ${method} ${url}`;
+    }
+    return "";
 }

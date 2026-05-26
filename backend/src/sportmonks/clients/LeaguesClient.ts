@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {League, LeagueInclude} from "../types/League";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface LeaguesQueryOptions {
     includes?: LeagueInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -21,7 +19,6 @@ export class LeaguesClient {
     getAll<T extends League = League>(opts: LeaguesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/leagues", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -29,7 +26,6 @@ export class LeaguesClient {
     getById<T extends League = League>(id: number, opts: LeaguesQueryOptions = {}): Promise<T> {
         return this.http.get<T>(`/leagues/${id}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -37,7 +33,6 @@ export class LeaguesClient {
     getLive<T extends League = League>(opts: LeaguesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>("/leagues/live", this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -49,7 +44,6 @@ export class LeaguesClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/leagues/between/${start}/${end}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -57,7 +51,6 @@ export class LeaguesClient {
     getByCountry<T extends League = League>(countryId: number, opts: LeaguesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/leagues/countries/${countryId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -65,7 +58,6 @@ export class LeaguesClient {
     search<T extends League = League>(name: string, opts: LeaguesQueryOptions = {}): Promise<T[]> {
         return this.http.get<T[]>(`/leagues/search/${encodeURIComponent(name)}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

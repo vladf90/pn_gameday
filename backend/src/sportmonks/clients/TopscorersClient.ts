@@ -1,10 +1,8 @@
-import {Context} from "../../Logger/Context";
 import {Topscorer, TopscorerInclude} from "../types/Topscorer";
 import {SportmonksHttpClient} from "./SportmonksHttpClient";
 
 export interface TopscorersQueryOptions {
     includes?: TopscorerInclude[];
-    ctx?: Context;
 }
 
 /**
@@ -24,7 +22,6 @@ export class TopscorersClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/topscorers/seasons/${seasonId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 
@@ -35,7 +32,6 @@ export class TopscorersClient {
     ): Promise<T[]> {
         return this.http.get<T[]>(`/topscorers/stages/${stageId}`, this.buildQuery(opts.includes), {
             entity: this.entity,
-            ctx: opts.ctx,
         });
     }
 

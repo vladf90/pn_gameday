@@ -1,5 +1,4 @@
 import {Logger} from "../Logger";
-import {ContextFactory} from "../Logger/Context";
 import {SessionRepository} from "../database/repositories/SessionRepository";
 import {LiveSnapshotStore} from "./LiveSnapshotStore";
 import {isFixtureFinished} from "./isFixtureFinished";
@@ -48,14 +47,13 @@ export class SessionAutoCloser {
      * without scheduling a duplicate tick.
      */
     start(): void {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
         if (this.started) {
-            this.logger.warning(ctx, "SessionAutoCloser.start() called twice — ignoring");
+            this.logger.warning("SessionAutoCloser.start() called twice — ignoring");
             return;
         }
         this.started = true;
         this.stopped = false;
-        this.logger.info(ctx, "SessionAutoCloser started", {
+        this.logger.info("SessionAutoCloser started", {
             interval_ms: this.options.intervalMs,
         });
         this.scheduleNext();
@@ -67,7 +65,6 @@ export class SessionAutoCloser {
      * caller can shut down deterministically.
      */
     async stop(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
         if (!this.started) {
             return;
         }
@@ -85,7 +82,7 @@ export class SessionAutoCloser {
             }
         }
         this.started = false;
-        this.logger.info(ctx, "SessionAutoCloser stopped");
+        this.logger.info("SessionAutoCloser stopped");
     }
 
     private scheduleNext(): void {
@@ -109,7 +106,6 @@ export class SessionAutoCloser {
      * `start()`ed to call this.
      */
     async runTick(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("session-auto-closer");
         try {
             const sessions = await this.sessionRepository.findActiveWithFixtureIds();
             let endedCount = 0;
@@ -120,7 +116,7 @@ export class SessionAutoCloser {
                 const result = await this.sessionRepository.markEnded(sessionId, userId);
                 if (result.status === 'ended') {
                     endedCount++;
-                    this.logger.info(ctx, "Session auto-ended", {
+                    this.logger.info("Session auto-ended", {
                         session_id: sessionId,
                         user_id: userId,
                         fixture_count: fixtureIds.length,
@@ -130,14 +126,14 @@ export class SessionAutoCloser {
                 // is best-effort and the next tick will reflect reality.
             }
             if (endedCount > 0) {
-                this.logger.info(ctx, "SessionAutoCloser tick complete", {
+                this.logger.info("SessionAutoCloser tick complete", {
                     ended_count: endedCount,
                     scanned: sessions.length,
                 });
             }
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            this.logger.error(ctx, "SessionAutoCloser tick failed", {error: message});
+            this.logger.error("SessionAutoCloser tick failed", {error: message});
         }
     }
 

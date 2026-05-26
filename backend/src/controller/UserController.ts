@@ -1,5 +1,4 @@
 import {Logger} from "../Logger";
-import {Context} from "../Logger/Context";
 import * as bcrypt from "bcrypt"
 import {UserRepository, UserPassword} from "../database/repositories/UserRepository";
 import * as jwt from "jsonwebtoken";
@@ -19,7 +18,7 @@ export class UserController {
         private readonly privateKey: Buffer) {
     }
 
-    get = async (ctx: Context, auth: UserAuth): Promise<GetUserResponse> => {
+    get = async (auth: UserAuth): Promise<GetUserResponse> => {
         const userResult = await this.userRepository.getUserById(auth.id);
         if (!userResult) {
             throw ServiceError.build("User not found", HttpStatusCodes.NOT_FOUND);
@@ -27,7 +26,7 @@ export class UserController {
         return userResult;
     };
 
-    login = async (ctx: Context, _: void, request: LoginRequest): Promise<LoginResponse> => {
+    login = async (_: void, request: LoginRequest): Promise<LoginResponse> => {
         const userResult: UserPassword = await this.userRepository.getUser(request.username);
         if (userResult === undefined) {
             throw ServiceError.build("Authentication failed.", HttpStatusCodes.UNAUTHORIZED);

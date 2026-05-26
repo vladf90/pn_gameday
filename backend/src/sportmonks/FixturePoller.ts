@@ -1,5 +1,4 @@
 import {Logger} from "../Logger";
-import {ContextFactory} from "../Logger/Context";
 import {FixtureSelectionProvider} from "./FixtureSelectionProvider";
 import {LiveSnapshotStore} from "./LiveSnapshotStore";
 import {FixturesClient} from "./clients/FixturesClient";
@@ -63,14 +62,13 @@ export class FixturePoller {
      * without scheduling a duplicate tick.
      */
     start(): void {
-        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
         if (this.started) {
-            this.logger.warning(ctx, "FixturePoller.start() called twice — ignoring");
+            this.logger.warning("FixturePoller.start() called twice — ignoring");
             return;
         }
         this.started = true;
         this.stopped = false;
-        this.logger.info(ctx, "FixturePoller started", {
+        this.logger.info("FixturePoller started", {
             interval_ms: this.options.intervalMs,
             batch_size: this.options.batchSize,
         });
@@ -83,7 +81,6 @@ export class FixturePoller {
      * caller can shut down deterministically.
      */
     async stop(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
         if (!this.started) {
             return;
         }
@@ -101,7 +98,7 @@ export class FixturePoller {
             }
         }
         this.started = false;
-        this.logger.info(ctx, "FixturePoller stopped");
+        this.logger.info("FixturePoller stopped");
     }
 
     private scheduleNext(): void {
@@ -120,7 +117,6 @@ export class FixturePoller {
     }
 
     private async runTick(): Promise<void> {
-        const ctx = ContextFactory.createProcessContext("sportmonks-poller");
         try {
             const activeIds = await this.provider.getActiveFixtureIds();
 
@@ -141,7 +137,6 @@ export class FixturePoller {
                     // `periods` (ADR 0006): the ticking period carries the
                     // authoritative live match minute the overlay timer needs.
                     includes: ["scores", "state", "events", "participants", "statistics", "periods"],
-                    ctx,
                 });
                 if (Array.isArray(fixtures)) {
                     for (const fixture of fixtures) {
@@ -159,7 +154,7 @@ export class FixturePoller {
             // on HTTP/parse failures — don't double-count here. We just log
             // and let the loop continue on the next tick.
             const message = e instanceof Error ? e.message : String(e);
-            this.logger.error(ctx, "FixturePoller tick failed", {error: message});
+            this.logger.error("FixturePoller tick failed", {error: message});
         }
 
         // `onTickFinished` runs whether the tick succeeded or threw — the
@@ -171,7 +166,7 @@ export class FixturePoller {
                 await this.options.onTickFinished();
             } catch (e) {
                 const message = e instanceof Error ? e.message : String(e);
-                this.logger.error(ctx, "FixturePoller onTickFinished failed", {error: message});
+                this.logger.error("FixturePoller onTickFinished failed", {error: message});
             }
         }
     }
