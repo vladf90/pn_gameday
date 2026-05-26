@@ -58,6 +58,18 @@ export class SessionRequestClient extends RequestClient {
         );
     }
 
+    /**
+     * Rotate the per-session overlay capability token (ADR 0008). Returns the
+     * refreshed `SessionSummary` with the new `overlayUrl`. Any OBS instance
+     * still using the previous URL will 404 on its next reload.
+     */
+    async rotateOverlayToken(id: number): Promise<SessionSummary> {
+        return await this.post<void, SessionSummary, void>(
+            `/sessions/${id}/overlay/token/rotate`,
+            undefined,
+        );
+    }
+
     async attachFixture(sessionId: number, sportmonksFixtureId: number): Promise<AttachFixtureResponse> {
         return await this.post<{sportmonksFixtureId: number}, AttachFixtureResponse, void>(
             `/sessions/${sessionId}/fixtures`,

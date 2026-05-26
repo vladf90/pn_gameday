@@ -45,6 +45,7 @@ export const SessionDetail: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [endLoading, setEndLoading] = useState<boolean>(false);
+    const [rotateLoading, setRotateLoading] = useState<boolean>(false);
     /** Per-fixture detach loading state so spinners don't gray the whole table. */
     const [detaching, setDetaching] = useState<Set<number>>(new Set());
 
@@ -104,6 +105,26 @@ export const SessionDetail: React.FC = () => {
             message.error("Could not copy URL — please copy manually");
         }
     }, [overlayUrl]);
+
+    const handleRotateOverlayToken = useCallback(async () => {
+        if (!session) {
+            return;
+        }
+        setRotateLoading(true);
+        try {
+            const updated = await client.rotateOverlayToken(session.id);
+            // Preserve the fixtureIds (rotate returns just the summary) and
+            // swap in the new overlayUrl so the copy/preview affordances
+            // reflect the rotated token immediately.
+            setSession({...session, overlayUrl: updated.overlayUrl});
+            message.success("Overlay URL rotated — paste the new URL into OBS");
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : "Failed to rotate overlay URL";
+            message.error(msg);
+        } finally {
+            setRotateLoading(false);
+        }
+    }, [session]);
 
     const handleEnd = useCallback(async () => {
         if (!session) {
@@ -271,6 +292,18 @@ export const SessionDetail: React.FC = () => {
                             <Button onClick={handleCopyOverlayUrl}>Copy</Button>
                         </Tooltip>
                         <Button onClick={() => window.open(overlayUrl, "_blank")}>Preview</Button>
+                        <Popconfirm
+                            title="Rotate overlay URL?"
+                            description="This invalidates the current OBS Browser Source. Paste the new URL into OBS after rotating."
+                            onConfirm={handleRotateOverlayToken}
+                            okText="Rotate"
+                            okButtonProps={{danger: true}}
+                            cancelText="Cancel"
+                        >
+                            <Tooltip title="Invalidate the current URL and generate a new one">
+                                <Button danger loading={rotateLoading}>Rotate</Button>
+                            </Tooltip>
+                        </Popconfirm>
                     </Space.Compact>
                 </Card>
 
