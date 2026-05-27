@@ -428,25 +428,24 @@ export class SessionController {
     }
 
     private toSessionSummary(session: Session): SessionSummary {
-        const summary: SessionSummary = {
+        // Token is the capability (ADR 0008). The encode is paranoia — hex
+        // tokens are URL-safe by construction, but `encodeURIComponent`
+        // keeps the contract explicit so a future token format change
+        // doesn't silently emit a broken URL.
+        const token = encodeURIComponent(session.overlayToken);
+        // When the base URL is unset (dev without env override), emit a
+        // root-relative URL so the frontend can resolve it against its own
+        // origin. Building it here keeps the token bundled — ADR 0008 wants
+        // a single source of overlay-URL truth.
+        const base = this.publicOverlayBaseUrl?.replace(/\/+$/, '') ?? '';
+        return {
             id: session.id,
             name: session.name,
             endedAt: session.endedAt,
             createdAt: session.createdAt,
             updatedAt: session.updatedAt,
+            overlayUrl: `${base}/overlay/${session.id}?token=${token}`,
         };
-        if (this.publicOverlayBaseUrl) {
-            // Trim trailing slash so concatenation stays clean regardless of
-            // operator habits (`http://host` vs `http://host/`).
-            const base = this.publicOverlayBaseUrl.replace(/\/+$/, '');
-            // Token is the capability (ADR 0008). The encode is paranoia — hex
-            // tokens are URL-safe by construction, but `encodeURIComponent`
-            // keeps the contract explicit so a future token format change
-            // doesn't silently emit a broken URL.
-            const token = encodeURIComponent(session.overlayToken);
-            summary.overlayUrl = `${base}/overlay/${session.id}?token=${token}`;
-        }
-        return summary;
     }
 }
 
@@ -457,11 +456,12 @@ export interface SessionSummary {
     createdAt: Date;
     updatedAt: Date;
     /**
-     * Absolute URL to paste into OBS as a Browser Source (ADR 0005). Omitted
-     * when `PUBLIC_OVERLAY_BASE_URL` is unset — clients can fall back to
-     * computing one from `window.location.origin`.
+     * Overlay URL to paste into OBS as a Browser Source (ADR 0005/0008).
+     * Absolute when `PUBLIC_OVERLAY_BASE_URL` is set, otherwise root-relative
+     * (`/overlay/:id?token=…`) — the frontend resolves relatives against
+     * `window.location.origin`.
      */
-    overlayUrl?: string;
+    overlayUrl: string;
 }
 
 export interface SessionDetail extends SessionSummary {

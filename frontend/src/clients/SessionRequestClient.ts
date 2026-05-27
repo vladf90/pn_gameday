@@ -10,11 +10,11 @@ export interface SessionSummary {
     createdAt: string;
     updatedAt: string;
     /**
-     * Absolute overlay URL when `PUBLIC_OVERLAY_BASE_URL` is set on the
-     * backend. Optional — when missing, the UI falls back to
-     * `${window.location.origin}/overlay/${id}` (ADR 0005).
+     * Overlay URL (ADR 0005/0008). Absolute when the backend has
+     * `PUBLIC_OVERLAY_BASE_URL` set, otherwise root-relative — callers must
+     * resolve it against `window.location.origin` before sharing.
      */
-    overlayUrl?: string;
+    overlayUrl: string;
 }
 
 export interface SessionDetail extends SessionSummary {

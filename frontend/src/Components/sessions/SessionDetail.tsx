@@ -84,14 +84,12 @@ export const SessionDetail: React.FC = () => {
     }, [fetchSession]);
 
     const overlayUrl = useMemo(() => {
-        if (session?.overlayUrl) {
-            return session.overlayUrl;
+        if (!session?.overlayUrl) {
+            return "";
         }
-        if (session) {
-            // Fallback for when PUBLIC_OVERLAY_BASE_URL is unset on the backend.
-            return `${window.location.origin}/overlay/${session.id}`;
-        }
-        return "";
+        // Backend may emit a root-relative URL when PUBLIC_OVERLAY_BASE_URL is
+        // unset; resolve it so OBS gets an absolute URL.
+        return new URL(session.overlayUrl, window.location.origin).toString();
     }, [session]);
 
     const handleCopyOverlayUrl = useCallback(async () => {
