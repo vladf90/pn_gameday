@@ -2,7 +2,7 @@
  * Test-database lifecycle for backend integration tests.
  *
  * Requires Docker (or colima/compatible) to be running locally — testcontainers
- * launches a real `postgres:16` instance per `setupTestDb()` call. First boot
+ * launches a real `postgres:18` instance per `setupTestDb()` call. First boot
  * pulls the image (~100 MB) and takes ~10s; subsequent boots are ~1–2s.
  *
  * **colima users:** set `DOCKER_HOST` so testcontainers can find the daemon
@@ -66,7 +66,7 @@ export interface TestDb {
 }
 
 export async function setupTestDb(): Promise<TestDb> {
-    const container = await new PostgreSqlContainer("postgres:16").start();
+    const container = await new PostgreSqlContainer("postgres:18").start();
 
     AppDataSource.setOptions({
         host: container.getHost(),
