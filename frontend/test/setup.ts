@@ -26,6 +26,28 @@ Object.defineProperty(window, "matchMedia", {
     })),
 });
 
+// Silence the Antd `<Card>` `bodyStyle` / `headStyle` deprecation warnings.
+//
+// They come from `@refinedev/antd`'s `<AuthPage>` rendering an Antd Card with
+// the pre-5.23 prop names. We can't fix it without upgrading to
+// `@refinedev/antd` 6.x, which requires Refine core 5.x — a major bump worth
+// its own ADR. Until then this filter keeps test output readable.
+//
+// Deliberately narrow: only the two specific Antd Card deprecations from the
+// AuthPage path. New warnings should still surface — if you broaden the
+// pattern, document why.
+const originalConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+    const first = args[0];
+    if (
+        typeof first === "string" &&
+        /\[antd: Card\] `(bodyStyle|headStyle)` is deprecated/.test(first)
+    ) {
+        return;
+    }
+    originalConsoleError(...args);
+};
+
 afterEach(() => {
     cleanup();
 });
