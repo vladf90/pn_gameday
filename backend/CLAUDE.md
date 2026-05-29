@@ -114,9 +114,21 @@ Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
 - **Runner:** Vitest (see [docs/adr/0009-testing-with-vitest.md](../docs/adr/0009-testing-with-vitest.md)).
 - **Layout:** tests are NOT colocated with source. They live under `test/<category>/`, mirroring the `src/` tree underneath:
   - `test/unit/<area>/Foo.test.ts` — fast, no I/O. Use `vi.mock` for module-level deps (`bcrypt`, `jsonwebtoken`, …) and inject plain stubs for repositories. See `test/unit/controller/UserController.test.ts` as the exemplar.
-  - `test/integration/<area>/Foo.test.ts` — real Postgres via testcontainers (added in issue #91).
-  - `test/helpers/` — shared factories + setup utilities.
+  - `test/integration/<area>/Foo.test.ts` — real Postgres via testcontainers. See `test/integration/database/UserRepository.test.ts` as the exemplar.
+  - `test/helpers/` — shared factories + setup utilities (`setupTestDb`, `makeUserAttrs`, …).
 - Scripts: `pnpm --filter backend test` (all), `test:unit`, `test:integration`, `test:watch`.
+
+### Integration tests — Docker
+
+Integration tests boot a real `postgres:16` via [testcontainers](https://node.testcontainers.org/). Docker (or colima) must be running locally.
+
+- **Docker Desktop:** works out of the box.
+- **colima:** export `DOCKER_HOST` so testcontainers can find the daemon (the `docker` CLI uses contexts; testcontainers does not):
+  ```bash
+  export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+  # or: eval "$(colima env)"
+  ```
+  The two `TESTCONTAINERS_*` env vars (`RYUK_DISABLED`, `DOCKER_SOCKET_OVERRIDE`) are set automatically inside `test/helpers/postgres.ts`.
 
 ## Observability
 
