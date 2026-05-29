@@ -18,10 +18,14 @@ export function hasPermission(
     if (permissions.includes(`${resource}:*`)) {
         return true;
     }
-    if (action !== '*' && permissions.includes(`${resource}:${action}`)) {
-        return true;
+    if (action === '*') {
+        // "Any action on this resource" — grant if at least one permission
+        // of the form `${resource}:<something>` exists. Without this branch
+        // `canAccessResource(["user:read"], "user")` would wrongly return
+        // false even though the caller clearly has a permission on `user`.
+        return permissions.some((p) => p.startsWith(`${resource}:`));
     }
-    return false;
+    return permissions.includes(`${resource}:${action}`);
 }
 
 /**
