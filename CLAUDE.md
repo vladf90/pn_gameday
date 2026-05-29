@@ -24,6 +24,7 @@ pnpm dev:backend         # Backend only (Express on :20000)
 pnpm build:frontend      # Production build
 pnpm build:backend       # TypeScript compile
 pnpm lint                # Lint both workspaces
+pnpm test                # Run Vitest in both workspaces (parallel)
 pnpm migration:run       # Run TypeORM migrations
 pnpm migration:revert    # Revert last migration
 pnpm migration:generate -- src/database/migrations/MigrationName

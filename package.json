@@ -11,6 +11,7 @@
     "lint": "pnpm lint:frontend && pnpm lint:backend",
     "lint:frontend": "pnpm --filter frontend lint",
     "lint:backend": "pnpm --filter backend lint",
+    "test": "pnpm -r --parallel --if-present test",
     "migration:run": "pnpm --filter backend migration:run",
     "migration:revert": "pnpm --filter backend migration:revert",
     "migration:generate": "pnpm --filter backend migration:generate",

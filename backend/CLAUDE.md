@@ -109,6 +109,13 @@ Add the new resource to the relevant role definitions.
 Roles defined in `config/permissions.ts`. Permission format: `resource:action` (e.g., `user:create`).
 Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
 
+## Testing
+
+- **Runner:** Vitest (see [docs/adr/0009-testing-with-vitest.md](../docs/adr/0009-testing-with-vitest.md)).
+- **Unit tests** are colocated next to source as `*.test.ts`. Use `vi.mock` for module-level deps (`bcrypt`, `jsonwebtoken`, …) and inject plain stubs for repositories. See `src/controller/UserController.test.ts` as the exemplar.
+- **Integration tests** live under `test/integration/` and use a real Postgres via testcontainers (added in issue #91).
+- Scripts: `pnpm --filter backend test` (all), `test:unit`, `test:integration`, `test:watch`.
+
 ## Observability
 
 - `GET /metrics` exposes Prometheus metrics (Node runtime + SportMonks integration). The endpoint is **unauthenticated by design** so scrapers don't need credentials — protect it via reverse proxy / firewall / private subnet in production.
