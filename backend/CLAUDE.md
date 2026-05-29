@@ -120,7 +120,7 @@ Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
 
 ### Integration tests — Docker
 
-Integration tests boot a real `postgres:16` via [testcontainers](https://node.testcontainers.org/). Docker (or colima) must be running locally.
+Integration tests boot a real `postgres:18` via [testcontainers](https://node.testcontainers.org/) — matching the production Postgres major version. Docker (or colima) must be running locally.
 
 - **Docker Desktop:** works out of the box.
 - **colima:** export `DOCKER_HOST` so testcontainers can find the daemon (the `docker` CLI uses contexts; testcontainers does not):
