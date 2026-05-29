@@ -37,3 +37,33 @@ export function makeUserAttrs(overrides: Partial<UserAttrs> = {}): UserAttrs {
         ...overrides,
     };
 }
+
+// ---------------------------------------------------------------------------
+// Session factories
+// ---------------------------------------------------------------------------
+
+export interface SessionAttrs {
+    /** Owner user id — must be a real user row when used in integration tests. */
+    userId: number;
+    name: string;
+    /** Hex overlay token. Defaults to a deterministic 64-char string. */
+    overlayToken: string;
+    endedAt: Date | null;
+}
+
+let sessionCounter = 0;
+
+/**
+ * Generates a unique session attribute bag.
+ * Pass `overrides` to pin specific fields (e.g. `userId`, `endedAt`).
+ */
+export function makeSessionAttrs(overrides: Partial<SessionAttrs> = {}): SessionAttrs {
+    const n = ++sessionCounter;
+    return {
+        userId: 1,
+        name: `Session ${n}`,
+        overlayToken: "ab".repeat(32).slice(0, 64),
+        endedAt: null,
+        ...overrides,
+    };
+}
