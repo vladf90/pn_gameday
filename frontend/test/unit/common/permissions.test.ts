@@ -10,12 +10,9 @@ import {describe, expect, it} from "vitest";
 import {canAccessResource, hasPermission} from "../../../src/common/permissions";
 
 describe("canAccessResource", () => {
-    // NOTE: `canAccessResource` only grants on wildcards — passing a specific
-    // action permission like `user:read` does NOT grant "any-action" access
-    // because the helper calls `hasPermission(..., '*')` and the implementation
-    // skips the exact-match branch when the action is '*'. That's a latent
-    // gap in the semantics; locking the current behavior in here so future
-    // refactors are intentional rather than accidental.
+    it("grants access when any specific-action permission for that resource is present", () => {
+        expect(canAccessResource(["user:read"], "user")).toBe(true);
+    });
 
     it("grants access via a resource wildcard", () => {
         expect(canAccessResource(["user:*"], "user")).toBe(true);
@@ -25,18 +22,20 @@ describe("canAccessResource", () => {
         expect(canAccessResource(["*:*"], "anything")).toBe(true);
     });
 
-    it("does NOT grant access on a specific action permission (see note above)", () => {
-        expect(canAccessResource(["user:read"], "user")).toBe(false);
-    });
-
-    it("denies access when the permission list does not match", () => {
-        expect(canAccessResource(["session:*"], "user")).toBe(false);
+    it("denies access when no permission references the resource", () => {
+        expect(canAccessResource(["session:read"], "user")).toBe(false);
     });
 
     it("denies access on null / undefined / empty permission lists", () => {
         expect(canAccessResource(null, "user")).toBe(false);
         expect(canAccessResource(undefined, "user")).toBe(false);
         expect(canAccessResource([], "user")).toBe(false);
+    });
+
+    it("treats `${resource}:` as a prefix, not a substring", () => {
+        // Guard against the `startsWith` implementation accidentally matching
+        // e.g. `user_admin:read` for resource `user`.
+        expect(canAccessResource(["user_admin:read"], "user")).toBe(false);
     });
 });
 
