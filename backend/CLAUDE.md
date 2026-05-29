@@ -123,12 +123,12 @@ Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
 Integration tests boot a real `postgres:18` via [testcontainers](https://node.testcontainers.org/) — matching the production Postgres major version. Docker (or colima) must be running locally.
 
 - **Docker Desktop:** works out of the box.
-- **colima:** export `DOCKER_HOST` so testcontainers can find the daemon (the `docker` CLI uses contexts; testcontainers does not):
+- **colima:** works out of the box too — `test/helpers/postgres.ts` auto-detects the default colima socket (`~/.colima/default/docker.sock`) when `DOCKER_HOST` is unset, since testcontainers ignores the `docker` CLI's contexts (otherwise it fails with "Could not find a working container runtime strategy"). Only if you run colima under a **non-default profile** do you need to export it yourself:
   ```bash
-  export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+  export DOCKER_HOST="unix://$HOME/.colima/<profile>/docker.sock"
   # or: eval "$(colima env)"
   ```
-  The two `TESTCONTAINERS_*` env vars (`RYUK_DISABLED`, `DOCKER_SOCKET_OVERRIDE`) are set automatically inside `test/helpers/postgres.ts`.
+  The `TESTCONTAINERS_*` env vars (`RYUK_DISABLED`, `DOCKER_SOCKET_OVERRIDE`) and the `DOCKER_HOST` fallback are all set automatically inside `test/helpers/postgres.ts`.
 
 ## Observability
 

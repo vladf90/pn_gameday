@@ -5,8 +5,10 @@
  * launches a real `postgres:18` instance per `setupTestDb()` call. First boot
  * pulls the image (~100 MB) and takes ~10s; subsequent boots are ~1–2s.
  *
- * **colima users:** set `DOCKER_HOST` so testcontainers can find the daemon
- * (Docker Desktop sets this automatically; colima does not):
+ * **colima users:** the colima socket is auto-detected below when `DOCKER_HOST`
+ * is unset (testcontainers ignores the docker CLI's contexts, so it otherwise
+ * fails with "Could not find a working container runtime strategy"). If colima
+ * runs under a non-default profile, export `DOCKER_HOST` yourself, e.g.:
  *
  *   export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
  *   # or: eval "$(colima env)"
@@ -29,6 +31,9 @@
  * test files but not to runtime-loaded modules. Passing the migration classes
  * directly sidesteps the issue and is more deterministic anyway.
  */
+import {existsSync} from "fs";
+import {homedir} from "os";
+
 // Safe testcontainers defaults — applied before the @testcontainers/postgresql
 // import so the env is set when the library reads it.
 //
@@ -41,6 +46,20 @@
 //   colima, so hard-coding it is safe.
 process.env.TESTCONTAINERS_RYUK_DISABLED ??= "true";
 process.env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE ??= "/var/run/docker.sock";
+
+// DOCKER_HOST: testcontainers locates the daemon via DOCKER_HOST / the default
+// socket — it does NOT read the docker CLI's contexts. On colima there is no
+// /var/run/docker.sock, so without DOCKER_HOST testcontainers fails with
+// "Could not find a working container runtime strategy". When DOCKER_HOST is
+// unset and the default socket is absent, fall back to colima's socket. This is
+// a no-op on Docker Desktop (which provides /var/run/docker.sock) and whenever
+// the developer has already exported DOCKER_HOST.
+if (!process.env.DOCKER_HOST && !existsSync("/var/run/docker.sock")) {
+    const colimaSocket = `${homedir()}/.colima/default/docker.sock`;
+    if (existsSync(colimaSocket)) {
+        process.env.DOCKER_HOST = `unix://${colimaSocket}`;
+    }
+}
 
 import {PostgreSqlContainer, type StartedPostgreSqlContainer} from "@testcontainers/postgresql";
 
