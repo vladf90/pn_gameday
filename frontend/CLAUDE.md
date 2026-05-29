@@ -78,3 +78,12 @@ Use Antd `Table`, `Form`, `Modal` etc. Hook into the request client directly.
 - Login stores `token`, `permissions`, `firstName`, `lastName` in `localStorage`.
 - `<Authenticated>` in `App.tsx` gates protected routes and redirects to `/login`.
 - `canAccessResource(permissions, resource)` in `common/permissions.ts` checks resource-level access.
+
+## Testing
+
+- **Runner:** Vitest + jsdom + React Testing Library (see [docs/adr/0009-testing-with-vitest.md](../docs/adr/0009-testing-with-vitest.md)).
+- **Layout:** tests are NOT colocated with source. They live under `test/<category>/`, mirroring `src/` underneath. e.g. a component at `src/Components/auth/Login.tsx` is tested at `test/unit/Components/auth/Login.test.tsx`.
+- **`test/renderWithProviders.tsx`** wraps a component in `<MemoryRouter>` + `<Refine>` with stubbed `authProvider`/`dataProvider`/`accessControlProvider`. Use it for any component that touches Refine hooks or react-router. Override individual providers via options to test specific auth/access states.
+- **`test/setup.ts`** is loaded automatically by Vitest — it registers `@testing-library/jest-dom` matchers and runs RTL `cleanup` after each test.
+- Mock request clients at the module boundary (`vi.mock("../../../../src/clients/AuthRequestClient", ...)`) rather than the network.
+- Scripts: `pnpm --filter frontend test`, `test:watch`.
