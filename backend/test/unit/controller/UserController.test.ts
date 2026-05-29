@@ -17,9 +17,9 @@ import {beforeEach, describe, expect, it, vi} from "vitest";
 import * as bcrypt from "bcrypt";
 import * as jwt from "jsonwebtoken";
 
-import {LoginValidator, UserController} from "./UserController";
-import type {UserRepository, UserPassword} from "../database/repositories/UserRepository";
-import {ServiceError} from "../utils/ServiceError";
+import {LoginValidator, UserController} from "../../../src/controller/UserController";
+import type {UserRepository, UserPassword} from "../../../src/database/repositories/UserRepository";
+import {ServiceError} from "../../../src/utils/ServiceError";
 
 vi.mock("bcrypt", () => ({compare: vi.fn()}));
 vi.mock("jsonwebtoken", () => ({sign: vi.fn()}));

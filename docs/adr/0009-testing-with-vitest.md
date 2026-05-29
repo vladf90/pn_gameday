@@ -75,24 +75,37 @@ Vitest specifically:
 
 ### Workspace layout
 
+Tests are **not** colocated with source. They live under a `test/` tree in each
+workspace, with one subfolder per category and an internal layout that mirrors
+`src/`. The vitest `include` glob is narrowed to `test/**/*.test.ts` so a stray
+colocated `.test.ts` in `src/` won't be silently picked up.
+
 ```
 backend/
-├── vitest.config.ts          # node env, threads, testTimeout for integration
-├── src/**/*.test.ts          # unit tests colocated with source
+├── vitest.config.ts          # node env, include: test/**/*.test.ts
 ├── test/
-│   ├── setup.ts              # global beforeAll/afterAll
+│   ├── unit/                 # fast, no I/O — mirrors src/ tree underneath
+│   │   └── controller/
+│   │       └── UserController.test.ts
+│   ├── integration/          # real Postgres via testcontainers
+│   │   └── **/*.test.ts
 │   ├── helpers/
 │   │   ├── postgres.ts       # testcontainers boot + migration runner
 │   │   └── factories.ts      # entity factories
-│   └── integration/
-│       └── **/*.test.ts      # repository / supertest tests
+│   └── setup.ts              # global beforeAll/afterAll (if needed)
 └── package.json              # `test`, `test:unit`, `test:integration` scripts
 
 frontend/
-├── vitest.config.ts          # jsdom env, RTL setup, alias from vite.config
-├── src/**/*.test.tsx         # component + hook tests colocated with source
+├── vitest.config.ts          # jsdom env, include: test/**/*.test.{ts,tsx}
 ├── test/
-│   └── setup.ts              # @testing-library/jest-dom, cleanup, MSW (if added later)
+│   ├── unit/                 # component + hook tests, mirrors src/
+│   │   ├── Components/
+│   │   │   └── auth/
+│   │   │       └── Login.test.tsx
+│   │   └── common/
+│   │       └── permissions.test.ts
+│   ├── renderWithProviders.tsx
+│   └── setup.ts              # @testing-library/jest-dom, cleanup
 └── package.json              # `test` script
 
 package.json (root)           # `pnpm test` runs both workspaces in parallel
@@ -100,7 +113,7 @@ package.json (root)           # `pnpm test` runs both workspaces in parallel
 
 ### Backend — unit tests
 
-- Colocated `*.test.ts` next to the module under test.
+- Live in `test/unit/<area>/<Module>.test.ts`, mirroring the `src/` path.
 - Plain `vi.mock`/`vi.fn` for repositories, fetch, time.
 - Targets: `ObjectValidator` subclasses, `ServiceError`, permission helpers in
   `config/permissions.ts`, SportMonks `RateLimitTracker`, controller methods

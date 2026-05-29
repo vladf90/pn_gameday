@@ -112,8 +112,10 @@ Wildcards supported: `*:*` (admin), `user:*` (all actions on user).
 ## Testing
 
 - **Runner:** Vitest (see [docs/adr/0009-testing-with-vitest.md](../docs/adr/0009-testing-with-vitest.md)).
-- **Unit tests** are colocated next to source as `*.test.ts`. Use `vi.mock` for module-level deps (`bcrypt`, `jsonwebtoken`, …) and inject plain stubs for repositories. See `src/controller/UserController.test.ts` as the exemplar.
-- **Integration tests** live under `test/integration/` and use a real Postgres via testcontainers (added in issue #91).
+- **Layout:** tests are NOT colocated with source. They live under `test/<category>/`, mirroring the `src/` tree underneath:
+  - `test/unit/<area>/Foo.test.ts` — fast, no I/O. Use `vi.mock` for module-level deps (`bcrypt`, `jsonwebtoken`, …) and inject plain stubs for repositories. See `test/unit/controller/UserController.test.ts` as the exemplar.
+  - `test/integration/<area>/Foo.test.ts` — real Postgres via testcontainers (added in issue #91).
+  - `test/helpers/` — shared factories + setup utilities.
 - Scripts: `pnpm --filter backend test` (all), `test:unit`, `test:integration`, `test:watch`.
 
 ## Observability
